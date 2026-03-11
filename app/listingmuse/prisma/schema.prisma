@@ -32,3 +32,145 @@ model Session {
   refreshToken        String?
   refreshTokenExpires DateTime?
 }
+
+model Shop {
+  id         String   @id @default(cuid())
+  shopDomain String   @unique
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  users            User[]
+  subscriptions    Subscription[]
+  productSnapshots ProductSnapshot[]
+  generations      Generation[]
+  usageLedger      UsageLedger[]
+  webhookEvents    WebhookEvent[]
+  auditLogs        AuditLog[]
+}
+
+model User {
+  id        String   @id @default(cuid())
+  shopId    String
+  email     String?
+  name      String?
+  role      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  shop        Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  generations Generation[]
+  auditLogs   AuditLog[]  @relation("AuditActor")
+
+  @@index([shopId])
+}
+
+model Subscription {
+  id                 String    @id @default(cuid())
+  shopId             String
+  plan               String
+  status             String
+  currentPeriodStart DateTime?
+  currentPeriodEnd   DateTime?
+  cancelAt           DateTime?
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  shop Shop @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([shopId])
+}
+
+model ProductSnapshot {
+  id          String   @id @default(cuid())
+  shopId      String
+  productId   String
+  title       String?
+  imageUrl    String?
+  productJson Json?
+  createdAt   DateTime @default(now())
+
+  shop        Shop         @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  generations Generation[]
+
+  @@index([shopId])
+  @@index([productId])
+}
+
+model Generation {
+  id                String   @id @default(cuid())
+  shopId            String
+  userId            String?
+  productSnapshotId String?
+  status            String
+  inputTitle        String?
+  inputImageUrl     String?
+  outputJson        Json?
+  createdAt         DateTime @default(now())
+  completedAt       DateTime?
+
+  shop            Shop             @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  user            User?            @relation(fields: [userId], references: [id], onDelete: SetNull)
+  productSnapshot ProductSnapshot? @relation(fields: [productSnapshotId], references: [id], onDelete: SetNull)
+  usageLedgers    UsageLedger[]
+  auditLogs       AuditLog[]
+
+  @@index([shopId])
+  @@index([userId])
+  @@index([productSnapshotId])
+}
+
+model UsageLedger {
+  id           String   @id @default(cuid())
+  shopId       String
+  generationId String?
+  kind         String
+  quantity     Int
+  unit         String?
+  metadata     Json?
+  createdAt    DateTime @default(now())
+
+  shop       Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+  @@index([generationId])
+}
+
+model WebhookEvent {
+  id          String   @id @default(cuid())
+  shopId      String?
+  topic       String
+  payload     Json?
+  status      String
+  receivedAt  DateTime @default(now())
+  processedAt DateTime?
+  error       String?
+
+  shop Shop? @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+  @@index([topic])
+  @@index([receivedAt])
+}
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  shopId      String
+  actorUserId String?
+  action      String
+  entityType  String?
+  entityId    String?
+  generationId String?
+  details     Json?
+  createdAt   DateTime @default(now())
+
+  shop       Shop        @relation(fields: [shopId], references: [id], onDelete: Cascade)
+  actorUser  User?       @relation("AuditActor", fields: [actorUserId], references: [id], onDelete: SetNull)
+  generation Generation? @relation(fields: [generationId], references: [id], onDelete: SetNull)
+
+  @@index([shopId])
+  @@index([actorUserId])
+  @@index([action])
+  @@index([createdAt])
+  @@index([generationId])
+}
