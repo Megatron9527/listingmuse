@@ -21,6 +21,15 @@ type ListingDraft = {
   images?: string[];
 };
 
+type ProductSummary = {
+  id: string;
+  title: string;
+  descriptionHtml?: string | null;
+  tags?: string[];
+  seo?: { title?: string | null; description?: string | null } | null;
+  imageUrl?: string | null;
+};
+
 type AdminClient = {
   graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
 };
@@ -30,7 +39,9 @@ type ProductQueryData = {
     product?: {
       id: string;
       title: string;
+      descriptionHtml?: string | null;
       tags?: string[];
+      seo?: { title?: string | null; description?: string | null } | null;
       featuredImage?: { url: string } | null;
       images?: { nodes?: Array<{ url: string }> } | null;
     } | null;
@@ -84,7 +95,12 @@ const getProductSnapshot = async (
       product(id: $id) {
         id
         title
+        descriptionHtml
         tags
+        seo {
+          title
+          description
+        }
         featuredImage { url }
         images(first: 1) { nodes { url } }
       }
@@ -104,6 +120,16 @@ const getProductSnapshot = async (
   const imageUrl: string | null =
     product.featuredImage?.url ?? product.images?.nodes?.[0]?.url ?? null;
 
+
+  const summary: ProductSummary = {
+    id: product.id,
+    title: product.title,
+    descriptionHtml: product.descriptionHtml ?? null,
+    tags: product.tags ?? [],
+    seo: product.seo ?? null,
+    imageUrl,
+  };
+
   const shop = await ensureShop(shopDomain);
   const snapshot = await prisma.productSnapshot.create({
     data: {
@@ -115,7 +141,7 @@ const getProductSnapshot = async (
     },
   });
 
-  return { ok: true as const, snapshot };
+  return { ok: true as const, snapshot, product: summary };
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -150,6 +176,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   // Optional: fetch snapshot from Shopify if productId provided.
   let productSnapshotId: string | null = null;
+  let product: ProductSummary | null = null;
   let resolvedTitle = inputTitle ?? "Untitled product";
   let resolvedImageUrl = inputImageUrl;
 
@@ -163,6 +190,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
       return jsonResponse({ ok: false, error: snap.error }, { status: 404 });
     }
     productSnapshotId = snap.snapshot.id;
+    product = snap.product;
     resolvedTitle = inputTitle ?? snap.snapshot.title ?? resolvedTitle;
     resolvedImageUrl = inputImageUrl ?? snap.snapshot.imageUrl ?? resolvedImageUrl;
   }
@@ -212,5 +240,5 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
-  return jsonResponse({ ok: true, generationId: generation.id, listing });
+  return jsonResponse({ ok: true, generationId: generation.id, product, listing });
 };
