@@ -1,6 +1,11 @@
 import type { Prisma } from "@prisma/client";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
+import {
+  getBillingForShopId,
+  isBillingCurrentlyActive,
+  paymentRequiredResponse,
+} from "../billing/billing.server";
 import { authenticate } from "../shopify.server";
 
 type GenerateRequest = {
@@ -31,7 +36,10 @@ type ProductSummary = {
 };
 
 type AdminClient = {
-  graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) => Promise<Response>;
 };
 
 type ProductQueryData = {
@@ -85,9 +93,7 @@ const getProductSnapshot = async (
   productIdInput: string,
 ) => {
   const numericId = extractNumericId(productIdInput);
-  const gid = numericId
-    ? `gid://shopify/Product/${numericId}`
-    : productIdInput;
+  const gid = numericId ? `gid://shopify/Product/${numericId}` : productIdInput;
 
   const resp = await admin.graphql(
     `#graphql
@@ -120,7 +126,6 @@ const getProductSnapshot = async (
   const imageUrl: string | null =
     product.featuredImage?.url ?? product.images?.nodes?.[0]?.url ?? null;
 
-
   const summary: ProductSummary = {
     id: product.id,
     title: product.title,
@@ -146,11 +151,33 @@ const getProductSnapshot = async (
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return jsonResponse({ ok: false, error: "Method not allowed" }, { status: 405 });
+  return jsonResponse(
+    { ok: false, error: "Method not allowed" },
+    { status: 405 },
+  );
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+
+  const shopDomain = session.shop;
+  const shop = await ensureShop(shopDomain);
+
+  const billing = await getBillingForShopId(shop.id);
+  const active = isBillingCurrentlyActive(
+    billing
+      ? {
+          status: billing.status,
+          currentPeriodEnd: billing.currentPeriodEnd ?? null,
+        }
+      : null,
+  );
+  if (!active) {
+    return paymentRequiredResponse({
+      status: billing?.status ?? null,
+      currentPeriodEnd: billing?.currentPeriodEnd ?? null,
+    });
+  }
 
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
@@ -167,12 +194,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return jsonResponse({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const shopDomain = session.shop;
   const productId = coerceString(payload.productId);
   const inputTitle = coerceString(payload.title);
   const inputImageUrl = coerceString(payload.imageUrl);
-
-  const shop = await ensureShop(shopDomain);
 
   // Optional: fetch snapshot from Shopify if productId provided.
   let productSnapshotId: string | null = null;
@@ -192,7 +216,8 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     productSnapshotId = snap.snapshot.id;
     product = snap.product;
     resolvedTitle = inputTitle ?? snap.snapshot.title ?? resolvedTitle;
-    resolvedImageUrl = inputImageUrl ?? snap.snapshot.imageUrl ?? resolvedImageUrl;
+    resolvedImageUrl =
+      inputImageUrl ?? snap.snapshot.imageUrl ?? resolvedImageUrl;
   }
 
   // Phase-2 business logic (still deterministic, but structured)
@@ -240,5 +265,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
-  return jsonResponse({ ok: true, generationId: generation.id, product, listing });
+  return jsonResponse({
+    ok: true,
+    generationId: generation.id,
+    product,
+    listing,
+  });
 };

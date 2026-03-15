@@ -28,6 +28,11 @@ type GenerateResponse = {
   product?: ProductSummary | null;
   listing?: ListingDraft;
   error?: string;
+  paywall?: {
+    billingUrl?: string;
+    checkoutPath?: string;
+    reason?: string;
+  };
 };
 
 type ApplyResponse = {
@@ -36,6 +41,11 @@ type ApplyResponse = {
   appliedToProductId?: string;
   error?: string;
   userErrors?: Array<{ field?: string[]; message: string }>;
+  paywall?: {
+    billingUrl?: string;
+    checkoutPath?: string;
+    reason?: string;
+  };
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -43,7 +53,13 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return null;
 };
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div
       style={{
@@ -75,7 +91,9 @@ export default function GeneratePage() {
   const [applyResult, setApplyResult] = useState<ApplyResponse | null>(null);
 
   const canGenerate = useMemo(() => {
-    return Boolean(productId.trim() || titleOverride.trim() || imageUrlOverride.trim());
+    return Boolean(
+      productId.trim() || titleOverride.trim() || imageUrlOverride.trim(),
+    );
   }, [imageUrlOverride, productId, titleOverride]);
 
   const canApply = useMemo(() => {
@@ -143,11 +161,18 @@ export default function GeneratePage() {
     <div style={{ padding: 16, maxWidth: 1100 }}>
       <h1 style={{ margin: "0 0 6px" }}>ListingMuse</h1>
       <p style={{ margin: "0 0 16px", opacity: 0.8 }}>
-        Generate → review → apply. Phase-2 flow uses DB persistence (generationId)
-        and Shopify productUpdate.
+        Generate → review → apply. Phase-2 flow uses DB persistence
+        (generationId) and Shopify productUpdate.
       </p>
 
-      <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 12 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 12,
+          alignItems: "center",
+          marginBottom: 12,
+        }}
+      >
         <Link to="/app/batch">Batch</Link>
         <span style={{ opacity: 0.35 }}>|</span>
         <Link to="/app/settings">Settings</Link>
@@ -166,7 +191,13 @@ export default function GeneratePage() {
               />
             </label>
 
-            <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 10,
+                gridTemplateColumns: "1fr 1fr",
+              }}
+            >
               <label style={{ display: "grid", gap: 6 }}>
                 <span>Title override (optional)</span>
                 <input
@@ -205,13 +236,24 @@ export default function GeneratePage() {
             </div>
 
             {generateResult?.ok === false && (
-              <div style={{ color: "#a00" }}>{generateResult.error ?? "Failed"}</div>
+              <div style={{ color: "#a00" }}>
+                {generateResult.error ?? "Failed"}
+                {generateResult.paywall?.billingUrl && (
+                  <span style={{ marginLeft: 10 }}>
+                    <Link to={generateResult.paywall.billingUrl}>
+                      Go to billing
+                    </Link>
+                  </span>
+                )}
+              </div>
             )}
           </div>
         </Panel>
 
         <Panel title="2) Review (before → after)">
-          <div style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
+          <div
+            style={{ display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}
+          >
             <div>
               <div style={{ fontWeight: 600, marginBottom: 8, opacity: 0.85 }}>
                 Current product
@@ -233,7 +275,9 @@ export default function GeneratePage() {
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>Description</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      Description
+                    </div>
                     <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
                       <code>{current.descriptionHtml ?? "(empty)"}</code>
                     </pre>
@@ -261,7 +305,9 @@ export default function GeneratePage() {
                     </div>
                   </div>
                   <div>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>Description</div>
+                    <div style={{ fontSize: 12, opacity: 0.7 }}>
+                      Description
+                    </div>
                     <pre style={{ margin: 0, whiteSpace: "pre-wrap" }}>
                       <code>{draft.descriptionHtml}</code>
                     </pre>
@@ -289,6 +335,19 @@ export default function GeneratePage() {
                 </span>
               )}
             </div>
+
+            {applyResult?.ok === false && (
+              <div style={{ color: "#a00" }}>
+                {applyResult.error ?? "Failed"}
+                {applyResult.paywall?.billingUrl && (
+                  <span style={{ marginLeft: 10 }}>
+                    <Link to={applyResult.paywall.billingUrl}>
+                      Go to billing
+                    </Link>
+                  </span>
+                )}
+              </div>
+            )}
 
             <pre style={{ margin: 0, overflow: "auto" }}>
               <code>

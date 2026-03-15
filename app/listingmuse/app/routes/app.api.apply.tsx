@@ -2,6 +2,11 @@ import type { Prisma } from "@prisma/client";
 import { randomUUID } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
+import {
+  getBillingForShopId,
+  isBillingCurrentlyActive,
+  paymentRequiredResponse,
+} from "../billing/billing.server";
 import { authenticate } from "../shopify.server";
 
 type ApplyRequest = {
@@ -18,7 +23,10 @@ type ListingDraft = {
 };
 
 type AdminClient = {
-  graphql: (query: string, options?: { variables?: Record<string, unknown> }) => Promise<Response>;
+  graphql: (
+    query: string,
+    options?: { variables?: Record<string, unknown> },
+  ) => Promise<Response>;
 };
 
 type ProductUpdateResponse = {
@@ -80,11 +88,31 @@ const isRecord = (v: unknown): v is Record<string, unknown> => {
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return jsonResponse({ ok: false, error: "Method not allowed" }, { status: 405 });
+  return jsonResponse(
+    { ok: false, error: "Method not allowed" },
+    { status: 405 },
+  );
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
   const { admin, session } = await authenticate.admin(request);
+
+  const shop = await ensureShop(session.shop);
+  const billing = await getBillingForShopId(shop.id);
+  const active = isBillingCurrentlyActive(
+    billing
+      ? {
+          status: billing.status,
+          currentPeriodEnd: billing.currentPeriodEnd ?? null,
+        }
+      : null,
+  );
+  if (!active) {
+    return paymentRequiredResponse({
+      status: billing?.status ?? null,
+      currentPeriodEnd: billing?.currentPeriodEnd ?? null,
+    });
+  }
 
   const contentType = request.headers.get("content-type") ?? "";
   if (!contentType.toLowerCase().includes("application/json")) {
@@ -103,7 +131,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   const productIdInput = coerceString(payload.productId);
   if (!productIdInput) {
-    return jsonResponse({ ok: false, error: "Missing productId" }, { status: 400 });
+    return jsonResponse(
+      { ok: false, error: "Missing productId" },
+      { status: 400 },
+    );
   }
 
   const generationId = coerceString(payload.generationId);
@@ -111,15 +142,23 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   // Load listing
   let listingUnknown: unknown = payload.generated;
   if (listingUnknown == null && generationId) {
-    const gen = await prisma.generation.findUnique({ where: { id: generationId } });
+    const gen = await prisma.generation.findUnique({
+      where: { id: generationId },
+    });
     if (!gen) {
-      return jsonResponse({ ok: false, error: "generationId not found" }, { status: 404 });
+      return jsonResponse(
+        { ok: false, error: "generationId not found" },
+        { status: 404 },
+      );
     }
     listingUnknown = gen.outputJson;
   }
 
   if (!isRecord(listingUnknown)) {
-    return jsonResponse({ ok: false, error: "Missing generated listing" }, { status: 400 });
+    return jsonResponse(
+      { ok: false, error: "Missing generated listing" },
+      { status: 400 },
+    );
   }
 
   const listing = listingUnknown as ListingDraft;
@@ -135,8 +174,17 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     seoDescription = coerceString(listing.seo.description);
   }
 
-  if (!title && !descriptionHtml && tags.length === 0 && !seoTitle && !seoDescription) {
-    return jsonResponse({ ok: false, error: "Nothing to apply" }, { status: 400 });
+  if (
+    !title &&
+    !descriptionHtml &&
+    tags.length === 0 &&
+    !seoTitle &&
+    !seoDescription
+  ) {
+    return jsonResponse(
+      { ok: false, error: "Nothing to apply" },
+      { status: 400 },
+    );
   }
 
   const productGid = toProductGid(productIdInput);
@@ -195,7 +243,6 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const updatedProduct = json.data?.productUpdate?.product ?? null;
 
   // Audit log
-  const shop = await ensureShop(session.shop);
   const audit = await prisma.auditLog.create({
     data: {
       shopId: shop.id,
