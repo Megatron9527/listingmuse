@@ -1,4 +1,4 @@
-import type { LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import {
   getBillingForShopId,
@@ -16,7 +16,7 @@ const ensureShop = async (shopDomain: string) => {
   });
 };
 
-export const loader = async ({ request }: LoaderFunctionArgs) => {
+const getStatusPayload = async (request: Request) => {
   const { session } = await authenticate.admin(request);
   const shop = await ensureShop(session.shop);
 
@@ -32,8 +32,8 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
   const env = getLemonSqueezyEnv();
 
-  return jsonResponse({
-    ok: true,
+  return {
+    ok: true as const,
     shopDomain: session.shop,
     configured: Boolean(
       env.storeId && env.apiKey && env.variantId && env.webhookSecret,
@@ -51,5 +51,14 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
           lemonsqueezyVariantId: billing.lemonsqueezyVariantId,
         }
       : null,
-  });
+  };
+};
+
+export const loader = async ({ request }: LoaderFunctionArgs) => {
+  return jsonResponse(await getStatusPayload(request));
+};
+
+// Useful for client-side polling after redirecting back from checkout.
+export const action = async ({ request }: ActionFunctionArgs) => {
+  return jsonResponse(await getStatusPayload(request));
 };

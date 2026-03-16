@@ -3,6 +3,7 @@ import prisma from "../db.server";
 export type BillingPaywallInfo = {
   billingUrl: string;
   checkoutPath: string;
+  statusPath: string;
 };
 
 export const getBillingForShopId = async (shopId: string) => {
@@ -32,6 +33,7 @@ export const getPaywallInfo = (): BillingPaywallInfo => {
   return {
     billingUrl: "/app/billing",
     checkoutPath: "/app/api/billing/checkout",
+    statusPath: "/app/api/billing/status",
   };
 };
 
