@@ -28,63 +28,80 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 };
 
 export const action = async ({ request }: ActionFunctionArgs) => {
-  const { session } = await authenticate.admin(request);
-  const shop = await ensureShop(session.shop);
+  try {
+    const { session } = await authenticate.admin(request);
+    const shop = await ensureShop(session.shop);
 
-  const billing = await getBillingForShopId(shop.id);
-  if (
-    isBillingCurrentlyActive(
-      billing
-        ? {
-            status: billing.status,
-            currentPeriodEnd: billing.currentPeriodEnd ?? null,
-          }
-        : null,
-    )
-  ) {
-    return jsonResponse({
-      ok: true,
-      alreadyActive: true,
-      billingUrl: "/app/billing",
+    const billing = await getBillingForShopId(shop.id);
+    if (
+      isBillingCurrentlyActive(
+        billing
+          ? {
+              status: billing.status,
+              currentPeriodEnd: billing.currentPeriodEnd ?? null,
+            }
+          : null,
+      )
+    ) {
+      return jsonResponse({
+        ok: true,
+        alreadyActive: true,
+        billingUrl: "/app/billing",
+      });
+    }
+
+    const env = getLemonSqueezyEnv();
+    if (!env.storeId || !env.apiKey || !env.variantId) {
+      return jsonResponse(
+        { ok: false, error: "LEMONSQUEEZY_NOT_CONFIGURED" },
+        { status: 500 },
+      );
+    }
+
+    const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
+    const redirectUrl = appUrl ? `${appUrl}/app/billing` : undefined;
+
+    const created = await createLemonSqueezyCheckoutUrl({
+      shopDomain: session.shop,
+      redirectUrl,
     });
-  }
 
-  const env = getLemonSqueezyEnv();
-  if (!env.storeId || !env.apiKey || !env.variantId) {
+    if (!created.ok) {
+      return jsonResponse(
+        {
+          ok: false,
+          error: created.error,
+          status: created.status ?? null,
+          details: "details" in created ? created.details ?? null : null,
+        },
+        { status: 502 },
+      );
+    }
+
+    await prisma.billing.upsert({
+      where: { shopId: shop.id },
+      create: {
+        shopId: shop.id,
+        provider: "LEMONSQUEEZY",
+        status: "inactive",
+        lemonsqueezyVariantId: env.variantId,
+      },
+      update: {
+        provider: "LEMONSQUEEZY",
+        lemonsqueezyVariantId: env.variantId,
+      },
+    });
+
+    return jsonResponse({ ok: true, checkoutUrl: created.url });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
     return jsonResponse(
-      { ok: false, error: "LEMONSQUEEZY_NOT_CONFIGURED" },
+      {
+        ok: false,
+        error: "BILLING_CHECKOUT_UNEXPECTED_ERROR",
+        details: message,
+      },
       { status: 500 },
     );
   }
-
-  const appUrl = (process.env.SHOPIFY_APP_URL || "").replace(/\/$/, "");
-  const redirectUrl = appUrl ? `${appUrl}/app/billing` : undefined;
-
-  const created = await createLemonSqueezyCheckoutUrl({
-    shopDomain: session.shop,
-    redirectUrl,
-  });
-
-  if (!created.ok) {
-    return jsonResponse(
-      { ok: false, error: created.error, status: created.status ?? null },
-      { status: 502 },
-    );
-  }
-
-  await prisma.billing.upsert({
-    where: { shopId: shop.id },
-    create: {
-      shopId: shop.id,
-      provider: "LEMONSQUEEZY",
-      status: "inactive",
-      lemonsqueezyVariantId: env.variantId,
-    },
-    update: {
-      provider: "LEMONSQUEEZY",
-      lemonsqueezyVariantId: env.variantId,
-    },
-  });
-
-  return jsonResponse({ ok: true, checkoutUrl: created.url });
 };
