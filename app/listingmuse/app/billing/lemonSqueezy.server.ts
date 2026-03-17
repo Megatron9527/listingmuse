@@ -24,11 +24,17 @@ export type LemonSqueezyWebhookEvent = {
   };
 };
 
+const cleanEnv = (value?: string | null, removeAllWhitespace = false) => {
+  const v = value?.trim() || null;
+  if (!v) return null;
+  return removeAllWhitespace ? v.replace(/\s+/g, "") : v;
+};
+
 export const getLemonSqueezyEnv = () => {
-  const storeId = process.env.LEMONSQUEEZY_STORE_ID?.trim() || null;
-  const apiKey = process.env.LEMONSQUEEZY_API_KEY?.trim() || null;
-  const variantId = process.env.LEMONSQUEEZY_VARIANT_ID?.trim() || null;
-  const webhookSecret = process.env.LEMONSQUEEZY_WEBHOOK_SECRET?.trim() || null;
+  const storeId = cleanEnv(process.env.LEMONSQUEEZY_STORE_ID) || null;
+  const apiKey = cleanEnv(process.env.LEMONSQUEEZY_API_KEY, true) || null;
+  const variantId = cleanEnv(process.env.LEMONSQUEEZY_VARIANT_ID) || null;
+  const webhookSecret = cleanEnv(process.env.LEMONSQUEEZY_WEBHOOK_SECRET) || null;
 
   return {
     storeId,
