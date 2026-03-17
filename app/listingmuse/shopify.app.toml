@@ -2,7 +2,7 @@
 
 client_id = "f5cf50cf29539c21c5beb66a3182977a"
 name = "listingmuse"
-application_url = "https://example.com"
+application_url = "https://listingmuse.onrender.com"
 embedded = true
 
 [build]
@@ -18,7 +18,7 @@ api_version = "2026-04"
 scopes = "write_metaobject_definitions,write_metaobjects,write_products"
 
 [auth]
-redirect_urls = [ "https://example.com/api/auth" ]
+redirect_urls = [ "https://listingmuse.onrender.com/auth/callback", "https://listingmuse.onrender.com/auth/shopify/callback", "https://listingmuse.onrender.com/api/auth" ]
 
 [product.metafields.app.demo_info]
 type = "single_line_text_field"
