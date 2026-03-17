@@ -170,10 +170,11 @@ export default function BillingPage() {
         ok: boolean;
         checkoutUrl?: string;
         error?: string;
+        details?: string | null;
       };
 
       if (!json.ok) {
-        setError(json.error ?? "Failed to create checkout");
+        setError([json.error ?? "Failed to create checkout", json.details].filter(Boolean).join(": "));
         return;
       }
 

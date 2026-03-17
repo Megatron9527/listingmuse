@@ -67,6 +67,12 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
 
     if (!created.ok) {
+      console.error("[billing.checkout] create checkout failed", {
+        shop: session.shop,
+        error: created.error,
+        status: created.status ?? null,
+        details: "details" in created ? created.details ?? null : null,
+      });
       return jsonResponse(
         {
           ok: false,
@@ -94,6 +100,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
     return jsonResponse({ ok: true, checkoutUrl: created.url });
   } catch (error) {
+    console.error("[billing.checkout] unexpected error", error);
     const message = error instanceof Error ? error.message : String(error);
     return jsonResponse(
       {
