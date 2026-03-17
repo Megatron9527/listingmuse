@@ -3,7 +3,7 @@
   "private": true,
   "scripts": {
     "build": "react-router build",
-    "dev": "shopify app dev --use-localhost",
+    "dev": "shopify app dev",
     "config:link": "shopify app config link",
     "generate": "shopify app generate",
     "deploy": "shopify app deploy",
@@ -20,7 +20,7 @@
     "typecheck": "react-router typegen && tsc --noEmit",
     "postinstall": "prisma generate",
     "dev:tunnel": "shopify app dev",
-    "dev:custom-tunnel": "shopify app dev --tunnel-url https://YOUR_TUNNEL_URL"
+    "dev:localhost": "shopify app dev --use-localhost"
   },
   "type": "module",
   "engines": {
