@@ -19,9 +19,11 @@ export const isBillingCurrentlyActive = (
   if (!billing) return false;
 
   const status = (billing.status || "").toLowerCase();
-  if (status === "active") return true;
+  if (["active", "paid", "on_trial", "trialing"].includes(status)) {
+    return true;
+  }
 
-  if (status === "cancelled") {
+  if (["cancelled", "canceled", "past_due", "unpaid"].includes(status)) {
     if (!billing.currentPeriodEnd) return false;
     return billing.currentPeriodEnd.getTime() > Date.now();
   }
