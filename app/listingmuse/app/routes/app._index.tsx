@@ -35,6 +35,15 @@ type ListingDraft = {
   };
 };
 
+type EditableDraft = {
+  title: string;
+  descriptionHtml: string;
+  bulletPointsText: string;
+  tagsText: string;
+  seoTitle: string;
+  seoDescription: string;
+};
+
 type ListingGenerationSettings = {
   language: "en";
   market: "cross-border";
@@ -78,6 +87,27 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return null;
 };
 
+const toEditableDraft = (draft: ListingDraft): EditableDraft => ({
+  title: draft.title ?? "",
+  descriptionHtml: draft.descriptionHtml ?? "",
+  bulletPointsText: (draft.bulletPoints ?? []).join("\n"),
+  tagsText: (draft.tags ?? []).join(", "),
+  seoTitle: draft.seo?.title ?? "",
+  seoDescription: draft.seo?.description ?? "",
+});
+
+const splitLines = (value: string) =>
+  value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+
+const splitTags = (value: string) =>
+  value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+
 export default function GeneratePage() {
   const [productId, setProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -87,6 +117,7 @@ export default function GeneratePage() {
   const [titleOverride, setTitleOverride] = useState("");
   const [imageUrlOverride, setImageUrlOverride] = useState("");
   const [showCompare, setShowCompare] = useState(false);
+  const [editableDraft, setEditableDraft] = useState<EditableDraft | null>(null);
 
   const [settings, setSettings] = useState<ListingGenerationSettings>({
     language: "en",
@@ -156,6 +187,7 @@ export default function GeneratePage() {
     setIsGenerating(true);
     setApplyResult(null);
     setGenerateResult(null);
+    setEditableDraft(null);
 
     try {
       const response = await fetch("/app/api/generate", {
@@ -173,6 +205,9 @@ export default function GeneratePage() {
       const data = (await response.json()) as GenerateResponse;
       setGenerateResult(data);
       setShowCompare(false);
+      if (data.listing) {
+        setEditableDraft(toEditableDraft(data.listing));
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
       setGenerateResult({ ok: false, error: message });
@@ -195,6 +230,17 @@ export default function GeneratePage() {
         body: JSON.stringify({
           productId: productId.trim(),
           generationId: generateResult.generationId,
+          generated: editableDraft
+            ? {
+                title: editableDraft.title,
+                descriptionHtml: editableDraft.descriptionHtml,
+                tags: splitTags(editableDraft.tagsText),
+                seo: {
+                  title: editableDraft.seoTitle,
+                  description: editableDraft.seoDescription,
+                },
+              }
+            : undefined,
         }),
       });
 
@@ -211,12 +257,21 @@ export default function GeneratePage() {
   const current = generateResult?.product ?? null;
   const draft = generateResult?.listing ?? null;
 
+  const previewDraft = editableDraft
+    ? {
+        title: editableDraft.title,
+        descriptionHtml: editableDraft.descriptionHtml,
+        bulletPoints: splitLines(editableDraft.bulletPointsText),
+        tags: splitTags(editableDraft.tagsText),
+        seo: {
+          title: editableDraft.seoTitle,
+          description: editableDraft.seoDescription,
+        },
+      }
+    : null;
+
   const ui = {
-    page: {
-      padding: 18,
-      maxWidth: 1180,
-      margin: "0 auto",
-    },
+    page: { padding: 18, maxWidth: 1180, margin: "0 auto" },
     hero: {
       display: "grid",
       gap: 14,
@@ -227,12 +282,7 @@ export default function GeneratePage() {
       background:
         "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,247,248,0.94) 100%)",
     },
-    heroTitle: {
-      margin: 0,
-      fontSize: 28,
-      lineHeight: 1.05,
-      letterSpacing: "-0.03em",
-    },
+    heroTitle: { margin: 0, fontSize: 28, lineHeight: 1.05, letterSpacing: "-0.03em" },
     heroSub: {
       margin: 0,
       opacity: 0.78,
@@ -240,11 +290,7 @@ export default function GeneratePage() {
       lineHeight: 1.45,
       fontSize: 14,
     },
-    heroStats: {
-      display: "flex",
-      gap: 10,
-      flexWrap: "wrap" as const,
-    },
+    heroStats: { display: "flex", gap: 10, flexWrap: "wrap" as const },
     navRow: {
       display: "flex",
       gap: 10,
@@ -284,16 +330,8 @@ export default function GeneratePage() {
       background: "rgba(255,255,255,0.94)",
       boxShadow: "0 1px 0 rgba(0,0,0,0.03)",
     },
-    sectionTitle: {
-      fontWeight: 700,
-      marginBottom: 10,
-      letterSpacing: "-0.01em",
-    },
-    label: {
-      display: "grid",
-      gap: 6,
-      fontSize: 13,
-    },
+    sectionTitle: { fontWeight: 700, marginBottom: 10, letterSpacing: "-0.01em" },
+    label: { display: "grid", gap: 6, fontSize: 13 },
     input: {
       padding: 10,
       borderRadius: 10,
@@ -301,6 +339,17 @@ export default function GeneratePage() {
       background: "white",
       width: "100%",
       boxSizing: "border-box" as const,
+    },
+    textarea: {
+      padding: 10,
+      borderRadius: 10,
+      border: "1px solid rgba(0,0,0,0.18)",
+      background: "white",
+      width: "100%",
+      boxSizing: "border-box" as const,
+      minHeight: 120,
+      font: "inherit",
+      resize: "vertical" as const,
     },
     select: {
       padding: 10,
@@ -335,10 +384,7 @@ export default function GeneratePage() {
       cursor: "pointer",
       fontWeight: 700,
     },
-    buttonDisabled: {
-      opacity: 0.55,
-      cursor: "not-allowed",
-    },
+    buttonDisabled: { opacity: 0.55, cursor: "not-allowed" },
     badge: {
       display: "inline-flex",
       alignItems: "center",
@@ -358,16 +404,8 @@ export default function GeneratePage() {
       fontSize: 12,
     },
     muted: { opacity: 0.72 },
-    resultGrid: {
-      display: "grid",
-      gap: 12,
-    },
-    row: {
-      display: "flex",
-      gap: 10,
-      flexWrap: "wrap" as const,
-      alignItems: "center",
-    },
+    resultGrid: { display: "grid", gap: 12 },
+    row: { display: "flex", gap: 10, flexWrap: "wrap" as const, alignItems: "center" },
     metricRow: {
       display: "grid",
       gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
@@ -395,11 +433,7 @@ export default function GeneratePage() {
       border: "1px solid rgba(0,0,0,0.08)",
       background: "rgba(0,0,0,0.02)",
     },
-    compareGrid: {
-      display: "grid",
-      gap: 10,
-      gridTemplateColumns: "1fr 1fr",
-    },
+    compareGrid: { display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" },
     htmlPreview: {
       padding: 12,
       borderRadius: 12,
@@ -407,11 +441,7 @@ export default function GeneratePage() {
       background: "rgba(0,0,0,0.02)",
       whiteSpace: "pre-wrap" as const,
     },
-    sectionSub: {
-      fontSize: 12,
-      opacity: 0.68,
-      marginBottom: 8,
-    },
+    sectionSub: { fontSize: 12, opacity: 0.68, marginBottom: 8 },
     pickerList: {
       display: "grid",
       gap: 8,
@@ -428,16 +458,16 @@ export default function GeneratePage() {
       display: "grid",
       gap: 6,
     },
+    editorGrid: { display: "grid", gap: 12, marginTop: 14 },
   };
 
-  const stripHtmlToText = (html: string) => {
-    return html
+  const stripHtmlToText = (html: string) =>
+    html
       .replace(/<\s*br\s*\/?\s*>/gi, "\n")
       .replace(/<\s*\/p\s*>/gi, "\n")
       .replace(/<[^>]+>/g, " ")
       .replace(/\s{2,}/g, " ")
       .trim();
-  };
 
   const excerpt = (html: string | null | undefined, max: number) => {
     if (!html) return "";
@@ -449,10 +479,7 @@ export default function GeneratePage() {
     return `${cut.trim()}...`;
   };
 
-  const diffLabel = (
-    before: string | null | undefined,
-    after: string | null | undefined,
-  ) => {
+  const diffLabel = (before: string | null | undefined, after: string | null | undefined) => {
     const b = (before ?? "").trim();
     const a = (after ?? "").trim();
     if (!b && !a) return "Missing";
@@ -462,23 +489,10 @@ export default function GeneratePage() {
     return "Updated";
   };
 
-  const Badge = ({ children }: { children: string }) => {
-    return <span style={ui.badge}>{children}</span>;
-  };
+  const Badge = ({ children }: { children: string }) => <span style={ui.badge}>{children}</span>;
+  const Chip = ({ children }: { children: string }) => <span style={ui.chip}>{children}</span>;
 
-  const Chip = ({ children }: { children: string }) => {
-    return <span style={ui.chip}>{children}</span>;
-  };
-
-  const CompareRow = ({
-    label,
-    before,
-    after,
-  }: {
-    label: string;
-    before: string;
-    after: string;
-  }) => {
+  const CompareRow = ({ label, before, after }: { label: string; before: string; after: string }) => {
     const status = diffLabel(before, after);
     return (
       <div style={ui.compareRow}>
@@ -488,15 +502,11 @@ export default function GeneratePage() {
         </div>
         <div style={ui.compareGrid}>
           <div style={{ ...ui.codeBlock, padding: 10 }}>
-            <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
-              Current
-            </div>
+            <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Current</div>
             <div style={{ whiteSpace: "pre-wrap" }}>{before || "(empty)"}</div>
           </div>
           <div style={{ ...ui.codeBlock, padding: 10 }}>
-            <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
-              Generated
-            </div>
+            <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>Edited</div>
             <div style={{ whiteSpace: "pre-wrap" }}>{after || "(empty)"}</div>
           </div>
         </div>
@@ -504,22 +514,16 @@ export default function GeneratePage() {
     );
   };
 
-  const draftDescriptionText = draft?.descriptionHtml
-    ? stripHtmlToText(draft.descriptionHtml)
+  const draftDescriptionText = previewDraft?.descriptionHtml
+    ? stripHtmlToText(previewDraft.descriptionHtml)
     : "";
 
   const improvementCount = [
-    diffLabel(current?.title ?? "", draft?.title ?? ""),
-    diffLabel((current?.tags ?? []).join(", "), (draft?.tags ?? []).join(", ")),
-    diffLabel(current?.seo?.title ?? "", draft?.seo?.title ?? ""),
-    diffLabel(
-      current?.seo?.description ?? "",
-      draft?.seo?.description ?? "",
-    ),
-    diffLabel(
-      excerpt(current?.descriptionHtml ?? null, 180),
-      excerpt(draft?.descriptionHtml ?? null, 180),
-    ),
+    diffLabel(current?.title ?? "", previewDraft?.title ?? ""),
+    diffLabel((current?.tags ?? []).join(", "), (previewDraft?.tags ?? []).join(", ")),
+    diffLabel(current?.seo?.title ?? "", previewDraft?.seo.title ?? ""),
+    diffLabel(current?.seo?.description ?? "", previewDraft?.seo.description ?? ""),
+    diffLabel(excerpt(current?.descriptionHtml ?? null, 180), excerpt(previewDraft?.descriptionHtml ?? null, 180)),
   ].filter((status) => status === "Updated" || status === "Added").length;
 
   const selectedProduct = productResults.find((product) => product.id === productId);
@@ -530,30 +534,22 @@ export default function GeneratePage() {
         <div style={{ display: "grid", gap: 8 }}>
           <h1 style={ui.heroTitle}>ListingMuse</h1>
           <p style={ui.heroSub}>
-            Turn rough product data into conversion-ready Shopify listings for
-            cross-border stores. Pick a product, generate polished copy, review
-            only what matters, then publish with one click.
+            Turn rough product data into conversion-ready Shopify listings for cross-border stores.
+            Pick a product, generate polished copy, edit it like a merchant, then publish with one click.
           </p>
         </div>
-
         <div style={ui.heroStats}>
           <Badge>English output</Badge>
           <Badge>Cross-border ready</Badge>
-          <Badge>Shopify apply flow</Badge>
+          <Badge>Editable before publish</Badge>
           {draft?.meta?.providerId ? <Badge>{draft.meta.providerId}</Badge> : null}
         </div>
       </div>
 
       <div style={ui.navRow}>
-        <Link to="/app/batch" style={ui.navPill}>
-          Batch
-        </Link>
-        <Link to="/app/settings" style={ui.navPill}>
-          Settings
-        </Link>
-        {generateResult?.generationId ? (
-          <span style={ui.badge}>Draft ID: {generateResult.generationId}</span>
-        ) : null}
+        <Link to="/app/batch" style={ui.navPill}>Batch</Link>
+        <Link to="/app/settings" style={ui.navPill}>Settings</Link>
+        {generateResult?.generationId ? <span style={ui.badge}>Draft ID: {generateResult.generationId}</span> : null}
       </div>
 
       <div style={ui.layout}>
@@ -563,36 +559,21 @@ export default function GeneratePage() {
             <div style={{ display: "grid", gap: 10 }}>
               <label style={ui.label}>
                 <span>Search products</span>
-                <input
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.currentTarget.value)}
-                  placeholder="Search by product title"
-                  style={ui.input}
-                />
+                <input value={productSearch} onChange={(e) => setProductSearch(e.currentTarget.value)} placeholder="Search by product title" style={ui.input} />
               </label>
-
               <label style={ui.label}>
                 <span>Selected product ID</span>
-                <input
-                  value={productId}
-                  onChange={(e) => setProductId(e.currentTarget.value)}
-                  placeholder="Pick below or paste a Shopify product ID"
-                  style={ui.input}
-                />
+                <input value={productId} onChange={(e) => setProductId(e.currentTarget.value)} placeholder="Pick below or paste a Shopify product ID" style={ui.input} />
               </label>
-
               {selectedProduct ? (
                 <div style={{ ...ui.codeBlock, padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>{selectedProduct.title}</div>
                   <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
                     {selectedProduct.status || "ACTIVE"}
-                    {typeof selectedProduct.totalInventory === "number"
-                      ? ` · Inventory ${selectedProduct.totalInventory}`
-                      : ""}
+                    {typeof selectedProduct.totalInventory === "number" ? ` · Inventory ${selectedProduct.totalInventory}` : ""}
                   </div>
                 </div>
               ) : null}
-
               <div style={ui.pickerList}>
                 {productResults.map((product) => (
                   <button
@@ -600,9 +581,7 @@ export default function GeneratePage() {
                     type="button"
                     style={{
                       ...ui.pickerItem,
-                      ...(product.id === productId
-                        ? { border: "1px solid #111", background: "rgba(0,0,0,0.04)" }
-                        : {}),
+                      ...(product.id === productId ? { border: "1px solid #111", background: "rgba(0,0,0,0.04)" } : {}),
                     }}
                     onClick={() => {
                       setProductId(product.id);
@@ -613,20 +592,13 @@ export default function GeneratePage() {
                     <div style={{ fontWeight: 700, textAlign: "left" }}>{product.title}</div>
                     <div style={{ fontSize: 12, opacity: 0.72, textAlign: "left" }}>
                       {product.status || "ACTIVE"}
-                      {typeof product.totalInventory === "number"
-                        ? ` · Inventory ${product.totalInventory}`
-                        : ""}
+                      {typeof product.totalInventory === "number" ? ` · Inventory ${product.totalInventory}` : ""}
                     </div>
                   </button>
                 ))}
               </div>
-
-              {isSearchingProducts ? (
-                <div style={ui.muted}>Loading products...</div>
-              ) : null}
-              {productSearchError ? (
-                <div style={{ color: "#a00" }}>{productSearchError}</div>
-              ) : null}
+              {isSearchingProducts ? <div style={ui.muted}>Loading products...</div> : null}
+              {productSearchError ? <div style={{ color: "#a00" }}>{productSearchError}</div> : null}
             </div>
           </div>
 
@@ -635,77 +607,30 @@ export default function GeneratePage() {
             <div style={{ display: "grid", gap: 10 }}>
               <label style={ui.label}>
                 <span>Language</span>
-                <select
-                  value={settings.language}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      language: e.currentTarget.value === "en" ? "en" : "en",
-                    }))
-                  }
-                  style={ui.select}
-                >
+                <select value={settings.language} onChange={(e) => setSettings((s) => ({ ...s, language: e.currentTarget.value === "en" ? "en" : "en" }))} style={ui.select}>
                   <option value="en">English</option>
                 </select>
               </label>
-
               <label style={ui.label}>
                 <span>Market</span>
-                <select
-                  value={settings.market}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      market:
-                        e.currentTarget.value === "cross-border"
-                          ? "cross-border"
-                          : "cross-border",
-                    }))
-                  }
-                  style={ui.select}
-                >
+                <select value={settings.market} onChange={(e) => setSettings((s) => ({ ...s, market: e.currentTarget.value === "cross-border" ? "cross-border" : "cross-border" }))} style={ui.select}>
                   <option value="cross-border">Cross-border independent stores</option>
                 </select>
               </label>
-
               <label style={ui.label}>
                 <span>Tone</span>
-                <select
-                  value={settings.tone}
-                  onChange={(e) =>
-                    setSettings((s) => ({
-                      ...s,
-                      tone:
-                        e.currentTarget.value === "neutral"
-                          ? "neutral"
-                          : "conversion",
-                    }))
-                  }
-                  style={ui.select}
-                >
+                <select value={settings.tone} onChange={(e) => setSettings((s) => ({ ...s, tone: e.currentTarget.value === "neutral" ? "neutral" : "conversion" }))} style={ui.select}>
                   <option value="conversion">Conversion-focused</option>
                   <option value="neutral">Neutral</option>
                 </select>
               </label>
-
               <label style={ui.label}>
                 <span>Title override</span>
-                <input
-                  value={titleOverride}
-                  onChange={(e) => setTitleOverride(e.currentTarget.value)}
-                  placeholder="Optional: force a starting title"
-                  style={ui.input}
-                />
+                <input value={titleOverride} onChange={(e) => setTitleOverride(e.currentTarget.value)} placeholder="Optional: force a starting title" style={ui.input} />
               </label>
-
               <label style={ui.label}>
                 <span>Image URL override</span>
-                <input
-                  value={imageUrlOverride}
-                  onChange={(e) => setImageUrlOverride(e.currentTarget.value)}
-                  placeholder="Optional: use a specific hero image"
-                  style={ui.input}
-                />
+                <input value={imageUrlOverride} onChange={(e) => setImageUrlOverride(e.currentTarget.value)} placeholder="Optional: use a specific hero image" style={ui.input} />
               </label>
             </div>
           </div>
@@ -713,30 +638,14 @@ export default function GeneratePage() {
           <div style={ui.card}>
             <div style={ui.sectionTitle}>3. Generate</div>
             <div style={{ display: "grid", gap: 10 }}>
-              <button
-                type="button"
-                onClick={generate}
-                disabled={!canGenerate || isGenerating}
-                style={{
-                  ...ui.buttonPrimary,
-                  ...(!canGenerate || isGenerating ? ui.buttonDisabled : {}),
-                }}
-              >
+              <button type="button" onClick={generate} disabled={!canGenerate || isGenerating} style={{ ...ui.buttonPrimary, ...(!canGenerate || isGenerating ? ui.buttonDisabled : {}) }}>
                 {isGenerating ? "Generating..." : "Generate optimized listing"}
               </button>
-
-              {!canGenerate ? (
-                <div style={ui.muted}>
-                  Pick a product or provide manual title/image input.
-                </div>
-              ) : null}
-
+              {!canGenerate ? <div style={ui.muted}>Pick a product or provide manual title/image input.</div> : null}
               {generateResult?.ok === false ? (
                 <div style={{ color: "#a00", display: "grid", gap: 6 }}>
                   <div>{generateResult.error ?? "Failed"}</div>
-                  {generateResult.paywall?.billingUrl ? (
-                    <Link to={generateResult.paywall.billingUrl}>Go to billing</Link>
-                  ) : null}
+                  {generateResult.paywall?.billingUrl ? <Link to={generateResult.paywall.billingUrl}>Go to billing</Link> : null}
                 </div>
               ) : null}
             </div>
@@ -747,41 +656,25 @@ export default function GeneratePage() {
           <div style={ui.card}>
             <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
               <div style={{ display: "grid", gap: 6 }}>
-                <div style={ui.sectionTitle}>Optimized listing</div>
-                <div style={ui.sectionSub}>
-                  Show the result first. Use compare only when you want to inspect changes.
-                </div>
+                <div style={ui.sectionTitle}>Optimized listing editor</div>
+                <div style={ui.sectionSub}>Generate first, then refine title, description, bullets, SEO, and tags before publishing.</div>
               </div>
               <div style={ui.row}>
-                {draft ? (
-                  <button
-                    type="button"
-                    style={ui.buttonSecondary}
-                    onClick={() => setShowCompare((v) => !v)}
-                  >
+                {previewDraft ? (
+                  <button type="button" style={ui.buttonSecondary} onClick={() => setShowCompare((v) => !v)}>
                     {showCompare ? "Hide changes" : "Compare with current"}
                   </button>
                 ) : null}
-                <button
-                  type="button"
-                  onClick={apply}
-                  disabled={!canApply || isApplying}
-                  style={{
-                    ...ui.buttonSuccess,
-                    ...(!canApply || isApplying ? ui.buttonDisabled : {}),
-                  }}
-                >
+                <button type="button" onClick={apply} disabled={!canApply || isApplying} style={{ ...ui.buttonSuccess, ...(!canApply || isApplying ? ui.buttonDisabled : {}) }}>
                   {isApplying ? "Applying..." : "Apply to Shopify"}
                 </button>
               </div>
             </div>
 
-            {!draft ? (
-              <div style={{ ...ui.muted, marginTop: 10 }}>
-                No draft yet. Generate a listing to preview the customer-facing result.
-              </div>
+            {!previewDraft || !editableDraft ? (
+              <div style={{ ...ui.muted, marginTop: 10 }}>No draft yet. Generate a listing to start editing.</div>
             ) : (
-              <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+              <div style={ui.editorGrid}>
                 <div style={ui.metricRow}>
                   <div style={ui.metricCard}>
                     <div style={{ fontSize: 12, opacity: 0.68 }}>Improved fields</div>
@@ -789,131 +682,76 @@ export default function GeneratePage() {
                   </div>
                   <div style={ui.metricCard}>
                     <div style={{ fontSize: 12, opacity: 0.68 }}>Bullet points</div>
-                    <div style={{ fontSize: 24, fontWeight: 800 }}>{draft.bulletPoints.length}</div>
+                    <div style={{ fontSize: 24, fontWeight: 800 }}>{splitLines(editableDraft.bulletPointsText).length}</div>
                   </div>
                   <div style={ui.metricCard}>
                     <div style={{ fontSize: 12, opacity: 0.68 }}>Tags</div>
-                    <div style={{ fontSize: 24, fontWeight: 800 }}>{draft.tags.length}</div>
+                    <div style={{ fontSize: 24, fontWeight: 800 }}>{splitTags(editableDraft.tagsText).length}</div>
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={ui.sectionSub}>Title</div>
-                  <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
-                    {draft.title}
-                  </div>
+                <label style={ui.label}>
+                  <span>Title</span>
+                  <input style={ui.input} value={editableDraft.title} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, title: e.currentTarget.value } : draftState))} />
+                </label>
+
+                <label style={ui.label}>
+                  <span>Product description</span>
+                  <textarea style={{ ...ui.textarea, minHeight: 180 }} value={editableDraft.descriptionHtml} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, descriptionHtml: e.currentTarget.value } : draftState))} />
+                </label>
+
+                <label style={ui.label}>
+                  <span>Bullet points (one per line)</span>
+                  <textarea style={ui.textarea} value={editableDraft.bulletPointsText} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, bulletPointsText: e.currentTarget.value } : draftState))} />
+                </label>
+
+                <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+                  <label style={ui.label}>
+                    <span>SEO title</span>
+                    <input style={ui.input} value={editableDraft.seoTitle} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoTitle: e.currentTarget.value } : draftState))} />
+                  </label>
+                  <label style={ui.label}>
+                    <span>SEO description</span>
+                    <textarea style={{ ...ui.textarea, minHeight: 96 }} value={editableDraft.seoDescription} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoDescription: e.currentTarget.value } : draftState))} />
+                  </label>
                 </div>
 
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={ui.sectionSub}>Selling points</div>
-                  {draft.bulletPoints.length === 0 ? (
-                    <div style={ui.muted}>No bullet points generated.</div>
-                  ) : (
-                    <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8 }}>
-                      {draft.bulletPoints.map((bullet) => (
-                        <li key={bullet}>{bullet}</li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
+                <label style={ui.label}>
+                  <span>Tags (comma separated)</span>
+                  <input style={ui.input} value={editableDraft.tagsText} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, tagsText: e.currentTarget.value } : draftState))} />
+                </label>
 
                 <div style={{ display: "grid", gap: 8 }}>
-                  <div style={ui.sectionSub}>Product description</div>
-                  <div style={ui.htmlPreview}>{draftDescriptionText || "(empty)"}</div>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={ui.sectionSub}>SEO</div>
-                  <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
-                    <div style={{ ...ui.codeBlock, padding: 12 }}>
-                      <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>SEO title</div>
-                      {draft.seo.title}
-                    </div>
-                    <div style={{ ...ui.codeBlock, padding: 12 }}>
-                      <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
-                        SEO description
-                      </div>
-                      {draft.seo.description}
-                    </div>
-                  </div>
-                </div>
-
-                <div style={{ display: "grid", gap: 8 }}>
-                  <div style={ui.sectionSub}>Tags</div>
+                  <div style={ui.sectionSub}>Live preview</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>{previewDraft.title}</div>
+                  <div style={ui.htmlPreview}>{stripHtmlToText(previewDraft.descriptionHtml) || "(empty)"}</div>
                   <div style={ui.row}>
-                    {draft.tags.length ? (
-                      draft.tags.map((tag) => <Chip key={tag}>{tag}</Chip>)
-                    ) : (
-                      <span style={ui.muted}>(none)</span>
-                    )}
+                    {previewDraft.tags.length ? previewDraft.tags.map((tag) => <Chip key={tag}>{tag}</Chip>) : <span style={ui.muted}>(no tags)</span>}
                   </div>
                 </div>
 
-                {applyResult?.ok ? (
-                  <div style={{ color: "#0b7a43", fontWeight: 700 }}>
-                    Applied to {applyResult.appliedToProductId}
-                  </div>
-                ) : null}
-
+                {applyResult?.ok ? <div style={{ color: "#0b7a43", fontWeight: 700 }}>Applied to {applyResult.appliedToProductId}</div> : null}
                 {applyResult?.ok === false ? (
                   <div style={{ color: "#a00", display: "grid", gap: 6 }}>
                     <div>{applyResult.error ?? "Failed"}</div>
-                    {applyResult.paywall?.billingUrl ? (
-                      <Link to={applyResult.paywall.billingUrl}>Go to billing</Link>
-                    ) : null}
+                    {applyResult.userErrors?.length ? applyResult.userErrors.map((err) => <div key={`${err.field?.join(".")}-${err.message}`}>{err.message}</div>) : null}
+                    {applyResult.paywall?.billingUrl ? <Link to={applyResult.paywall.billingUrl}>Go to billing</Link> : null}
                   </div>
                 ) : null}
               </div>
             )}
           </div>
 
-          {draft && showCompare ? (
+          {previewDraft && showCompare ? (
             <div style={ui.card}>
               <div style={ui.sectionTitle}>Change review</div>
-              <div style={ui.sectionSub}>
-                Keep this secondary. Merchants should focus on the generated result, then inspect the diff only when needed.
-              </div>
-
+              <div style={ui.sectionSub}>Keep this secondary. Merchants should focus on the result, then inspect changes only when needed.</div>
               <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
-                <CompareRow
-                  label="Title"
-                  before={current?.title ?? ""}
-                  after={draft.title ?? ""}
-                />
-                <CompareRow
-                  label="Tags"
-                  before={(current?.tags ?? []).join(", ")}
-                  after={(draft?.tags ?? []).join(", ")}
-                />
-                <CompareRow
-                  label="SEO title"
-                  before={current?.seo?.title ?? ""}
-                  after={draft?.seo?.title ?? ""}
-                />
-                <CompareRow
-                  label="SEO description"
-                  before={current?.seo?.description ?? ""}
-                  after={draft?.seo?.description ?? ""}
-                />
-                <CompareRow
-                  label="Description excerpt"
-                  before={excerpt(current?.descriptionHtml ?? null, 180)}
-                  after={excerpt(draft?.descriptionHtml ?? null, 180)}
-                />
-
-                <details>
-                  <summary style={{ cursor: "pointer", opacity: 0.85 }}>
-                    Raw HTML
-                  </summary>
-                  <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-                    <pre style={ui.codeBlock}>
-                      <code>{current?.descriptionHtml ?? "(empty current)"}</code>
-                    </pre>
-                    <pre style={ui.codeBlock}>
-                      <code>{draft?.descriptionHtml ?? "(empty generated)"}</code>
-                    </pre>
-                  </div>
-                </details>
+                <CompareRow label="Title" before={current?.title ?? ""} after={previewDraft.title ?? ""} />
+                <CompareRow label="Tags" before={(current?.tags ?? []).join(", ")} after={(previewDraft.tags ?? []).join(", ")} />
+                <CompareRow label="SEO title" before={current?.seo?.title ?? ""} after={previewDraft.seo.title ?? ""} />
+                <CompareRow label="SEO description" before={current?.seo?.description ?? ""} after={previewDraft.seo.description ?? ""} />
+                <CompareRow label="Description excerpt" before={excerpt(current?.descriptionHtml ?? null, 180)} after={excerpt(previewDraft.descriptionHtml ?? null, 180)} />
               </div>
             </div>
           ) : null}
@@ -923,6 +761,4 @@ export default function GeneratePage() {
   );
 }
 
-export const headers: HeadersFunction = (headersArgs) => {
-  return boundary.headers(headersArgs);
-};
+export const headers: HeadersFunction = (headersArgs) => boundary.headers(headersArgs);
