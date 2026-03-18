@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
 import { Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
@@ -10,6 +10,14 @@ type ProductSummary = {
   descriptionHtml?: string | null;
   tags?: string[];
   seo?: { title?: string | null; description?: string | null } | null;
+  imageUrl?: string | null;
+};
+
+type ProductPickerItem = {
+  id: string;
+  title: string;
+  status?: string | null;
+  totalInventory?: number | null;
   imageUrl?: string | null;
 };
 
@@ -59,6 +67,12 @@ type ApplyResponse = {
   };
 };
 
+type ProductSearchResponse = {
+  ok: boolean;
+  products?: ProductPickerItem[];
+  error?: string;
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   return null;
@@ -66,6 +80,10 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
 
 export default function GeneratePage() {
   const [productId, setProductId] = useState("");
+  const [productSearch, setProductSearch] = useState("");
+  const [productResults, setProductResults] = useState<ProductPickerItem[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+  const [productSearchError, setProductSearchError] = useState<string | null>(null);
   const [titleOverride, setTitleOverride] = useState("");
   const [imageUrlOverride, setImageUrlOverride] = useState("");
   const [showCompare, setShowCompare] = useState(false);
@@ -83,6 +101,46 @@ export default function GeneratePage() {
     null,
   );
   const [applyResult, setApplyResult] = useState<ApplyResponse | null>(null);
+
+  useEffect(() => {
+    const controller = new AbortController();
+    const query = productSearch.trim();
+
+    const run = async () => {
+      setIsSearchingProducts(true);
+      setProductSearchError(null);
+      try {
+        const searchUrl = query
+          ? `/app/api/products?q=${encodeURIComponent(query)}`
+          : "/app/api/products";
+        const response = await fetch(searchUrl, {
+          credentials: "same-origin",
+          signal: controller.signal,
+        });
+        const data = (await response.json()) as ProductSearchResponse;
+        if (!response.ok || data.ok === false) {
+          throw new Error(data.error || "Product search failed");
+        }
+        setProductResults(data.products ?? []);
+      } catch (error) {
+        if ((error as Error).name === "AbortError") return;
+        setProductResults([]);
+        setProductSearchError(
+          error instanceof Error ? error.message : "Product search failed",
+        );
+      } finally {
+        if (!controller.signal.aborted) {
+          setIsSearchingProducts(false);
+        }
+      }
+    };
+
+    const timeout = setTimeout(run, query ? 260 : 0);
+    return () => {
+      clearTimeout(timeout);
+      controller.abort();
+    };
+  }, [productSearch]);
 
   const canGenerate = useMemo(() => {
     return Boolean(
@@ -208,7 +266,7 @@ export default function GeneratePage() {
     },
     layout: {
       display: "grid",
-      gridTemplateColumns: "minmax(320px, 360px) minmax(0, 1fr)",
+      gridTemplateColumns: "minmax(320px, 380px) minmax(0, 1fr)",
       gap: 14,
       alignItems: "start",
     },
@@ -241,6 +299,8 @@ export default function GeneratePage() {
       borderRadius: 10,
       border: "1px solid rgba(0,0,0,0.18)",
       background: "white",
+      width: "100%",
+      boxSizing: "border-box" as const,
     },
     select: {
       padding: 10,
@@ -352,6 +412,22 @@ export default function GeneratePage() {
       opacity: 0.68,
       marginBottom: 8,
     },
+    pickerList: {
+      display: "grid",
+      gap: 8,
+      marginTop: 10,
+      maxHeight: 280,
+      overflowY: "auto" as const,
+    },
+    pickerItem: {
+      border: "1px solid rgba(0,0,0,0.10)",
+      borderRadius: 12,
+      padding: 10,
+      background: "rgba(0,0,0,0.02)",
+      cursor: "pointer",
+      display: "grid",
+      gap: 6,
+    },
   };
 
   const stripHtmlToText = (html: string) => {
@@ -446,6 +522,8 @@ export default function GeneratePage() {
     ),
   ].filter((status) => status === "Updated" || status === "Added").length;
 
+  const selectedProduct = productResults.find((product) => product.id === productId);
+
   return (
     <div style={ui.page}>
       <div style={ui.hero}>
@@ -453,8 +531,8 @@ export default function GeneratePage() {
           <h1 style={ui.heroTitle}>ListingMuse</h1>
           <p style={ui.heroSub}>
             Turn rough product data into conversion-ready Shopify listings for
-            cross-border stores. Generate polished copy first, review only what
-            matters, then publish with one click.
+            cross-border stores. Pick a product, generate polished copy, review
+            only what matters, then publish with one click.
           </p>
         </div>
 
@@ -484,34 +562,71 @@ export default function GeneratePage() {
             <div style={ui.sectionTitle}>1. Choose product</div>
             <div style={{ display: "grid", gap: 10 }}>
               <label style={ui.label}>
-                <span>Shopify Product ID</span>
+                <span>Search products</span>
+                <input
+                  value={productSearch}
+                  onChange={(e) => setProductSearch(e.currentTarget.value)}
+                  placeholder="Search by product title"
+                  style={ui.input}
+                />
+              </label>
+
+              <label style={ui.label}>
+                <span>Selected product ID</span>
                 <input
                   value={productId}
                   onChange={(e) => setProductId(e.currentTarget.value)}
-                  placeholder="gid://shopify/Product/1234567890 or 1234567890"
+                  placeholder="Pick below or paste a Shopify product ID"
                   style={ui.input}
                 />
               </label>
 
-              <label style={ui.label}>
-                <span>Title override</span>
-                <input
-                  value={titleOverride}
-                  onChange={(e) => setTitleOverride(e.currentTarget.value)}
-                  placeholder="Optional: force a starting title"
-                  style={ui.input}
-                />
-              </label>
+              {selectedProduct ? (
+                <div style={{ ...ui.codeBlock, padding: 12 }}>
+                  <div style={{ fontWeight: 700 }}>{selectedProduct.title}</div>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>
+                    {selectedProduct.status || "ACTIVE"}
+                    {typeof selectedProduct.totalInventory === "number"
+                      ? ` · Inventory ${selectedProduct.totalInventory}`
+                      : ""}
+                  </div>
+                </div>
+              ) : null}
 
-              <label style={ui.label}>
-                <span>Image URL override</span>
-                <input
-                  value={imageUrlOverride}
-                  onChange={(e) => setImageUrlOverride(e.currentTarget.value)}
-                  placeholder="Optional: use a specific hero image"
-                  style={ui.input}
-                />
-              </label>
+              <div style={ui.pickerList}>
+                {productResults.map((product) => (
+                  <button
+                    key={product.id}
+                    type="button"
+                    style={{
+                      ...ui.pickerItem,
+                      ...(product.id === productId
+                        ? { border: "1px solid #111", background: "rgba(0,0,0,0.04)" }
+                        : {}),
+                    }}
+                    onClick={() => {
+                      setProductId(product.id);
+                      setTitleOverride("");
+                      if (product.imageUrl) setImageUrlOverride(product.imageUrl);
+                    }}
+                  >
+                    <div style={{ fontWeight: 700, textAlign: "left" }}>{product.title}</div>
+                    <div style={{ fontSize: 12, opacity: 0.72, textAlign: "left" }}>
+                      {product.status || "ACTIVE"}
+                      {typeof product.totalInventory === "number"
+                        ? ` · Inventory ${product.totalInventory}`
+                        : ""}
+                    </div>
+                  </button>
+                ))}
+              </div>
+
+              {isSearchingProducts ? (
+                <div style={ui.muted}>Loading products...</div>
+              ) : null}
+              {productSearchError ? (
+                <div style={{ color: "#a00" }}>{productSearchError}</div>
+              ) : null}
             </div>
           </div>
 
@@ -572,6 +687,26 @@ export default function GeneratePage() {
                   <option value="neutral">Neutral</option>
                 </select>
               </label>
+
+              <label style={ui.label}>
+                <span>Title override</span>
+                <input
+                  value={titleOverride}
+                  onChange={(e) => setTitleOverride(e.currentTarget.value)}
+                  placeholder="Optional: force a starting title"
+                  style={ui.input}
+                />
+              </label>
+
+              <label style={ui.label}>
+                <span>Image URL override</span>
+                <input
+                  value={imageUrlOverride}
+                  onChange={(e) => setImageUrlOverride(e.currentTarget.value)}
+                  placeholder="Optional: use a specific hero image"
+                  style={ui.input}
+                />
+              </label>
             </div>
           </div>
 
@@ -592,7 +727,7 @@ export default function GeneratePage() {
 
               {!canGenerate ? (
                 <div style={ui.muted}>
-                  Add a product ID or provide at least a title/image.
+                  Pick a product or provide manual title/image input.
                 </div>
               ) : null}
 
