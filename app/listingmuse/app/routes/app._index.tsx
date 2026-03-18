@@ -64,34 +64,11 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
   return null;
 };
 
-function Panel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        border: "1px solid rgba(0,0,0,0.12)",
-        borderRadius: 10,
-        padding: 12,
-        background: "rgba(0,0,0,0.02)",
-      }}
-    >
-      <div style={{ fontWeight: 650, marginBottom: 10 }}>{title}</div>
-      {children}
-    </div>
-  );
-}
-
 export default function GeneratePage() {
-  // Primary flow: paste a Shopify product GID (or numeric id), generate a draft,
-  // review before/after, then apply by generationId.
   const [productId, setProductId] = useState("");
   const [titleOverride, setTitleOverride] = useState("");
   const [imageUrlOverride, setImageUrlOverride] = useState("");
+  const [showCompare, setShowCompare] = useState(false);
 
   const [settings, setSettings] = useState<ListingGenerationSettings>({
     language: "en",
@@ -137,6 +114,7 @@ export default function GeneratePage() {
 
       const data = (await response.json()) as GenerateResponse;
       setGenerateResult(data);
+      setShowCompare(false);
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
       setGenerateResult({ ok: false, error: message });
@@ -178,19 +156,36 @@ export default function GeneratePage() {
   const ui = {
     page: {
       padding: 18,
-      maxWidth: 1160,
+      maxWidth: 1180,
       margin: "0 auto",
     },
+    hero: {
+      display: "grid",
+      gap: 14,
+      marginBottom: 14,
+      padding: 18,
+      borderRadius: 16,
+      border: "1px solid rgba(0,0,0,0.10)",
+      background:
+        "linear-gradient(180deg, rgba(255,255,255,0.98) 0%, rgba(246,247,248,0.94) 100%)",
+    },
     heroTitle: {
-      margin: "0 0 6px",
-      fontSize: 22,
-      letterSpacing: "-0.01em",
+      margin: 0,
+      fontSize: 28,
+      lineHeight: 1.05,
+      letterSpacing: "-0.03em",
     },
     heroSub: {
-      margin: "0 0 16px",
-      opacity: 0.8,
-      maxWidth: 820,
-      lineHeight: 1.35,
+      margin: 0,
+      opacity: 0.78,
+      maxWidth: 780,
+      lineHeight: 1.45,
+      fontSize: 14,
+    },
+    heroStats: {
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap" as const,
     },
     navRow: {
       display: "flex",
@@ -203,7 +198,7 @@ export default function GeneratePage() {
       display: "inline-flex",
       alignItems: "center",
       gap: 6,
-      padding: "6px 10px",
+      padding: "7px 11px",
       borderRadius: 999,
       border: "1px solid rgba(0,0,0,0.10)",
       background: "rgba(0,0,0,0.02)",
@@ -213,18 +208,28 @@ export default function GeneratePage() {
     },
     layout: {
       display: "grid",
-      gridTemplateColumns: "minmax(300px, 360px) minmax(0, 1fr)",
+      gridTemplateColumns: "minmax(320px, 360px) minmax(0, 1fr)",
       gap: 14,
+      alignItems: "start",
+    },
+    sidebar: {
+      display: "grid",
+      gap: 12,
+      position: "sticky" as const,
+      top: 18,
+      alignSelf: "start",
     },
     card: {
       border: "1px solid rgba(0,0,0,0.12)",
-      borderRadius: 12,
-      padding: 12,
-      background: "rgba(0,0,0,0.02)",
+      borderRadius: 14,
+      padding: 14,
+      background: "rgba(255,255,255,0.94)",
+      boxShadow: "0 1px 0 rgba(0,0,0,0.03)",
     },
     sectionTitle: {
-      fontWeight: 680,
+      fontWeight: 700,
       marginBottom: 10,
+      letterSpacing: "-0.01em",
     },
     label: {
       display: "grid",
@@ -232,25 +237,43 @@ export default function GeneratePage() {
       fontSize: 13,
     },
     input: {
-      padding: 9,
+      padding: 10,
       borderRadius: 10,
       border: "1px solid rgba(0,0,0,0.18)",
       background: "white",
     },
     select: {
-      padding: 9,
+      padding: 10,
       borderRadius: 10,
       border: "1px solid rgba(0,0,0,0.18)",
       background: "white",
     },
     buttonPrimary: {
-      padding: "9px 12px",
+      padding: "11px 14px",
       borderRadius: 10,
       border: "1px solid rgba(0,0,0,0.18)",
       background: "#111",
       color: "white",
       cursor: "pointer",
-      fontWeight: 650,
+      fontWeight: 700,
+    },
+    buttonSecondary: {
+      padding: "10px 12px",
+      borderRadius: 10,
+      border: "1px solid rgba(0,0,0,0.12)",
+      background: "white",
+      color: "#111",
+      cursor: "pointer",
+      fontWeight: 600,
+    },
+    buttonSuccess: {
+      padding: "11px 14px",
+      borderRadius: 10,
+      border: "1px solid rgba(0,0,0,0.16)",
+      background: "#0b7a43",
+      color: "white",
+      cursor: "pointer",
+      fontWeight: 700,
     },
     buttonDisabled: {
       opacity: 0.55,
@@ -259,27 +282,43 @@ export default function GeneratePage() {
     badge: {
       display: "inline-flex",
       alignItems: "center",
-      padding: "2px 8px",
+      padding: "4px 9px",
       borderRadius: 999,
-      border: "1px solid rgba(0,0,0,0.12)",
+      border: "1px solid rgba(0,0,0,0.10)",
       background: "rgba(0,0,0,0.03)",
       fontSize: 12,
     },
     chip: {
       display: "inline-flex",
       alignItems: "center",
-      padding: "4px 10px",
+      padding: "5px 10px",
       borderRadius: 999,
       border: "1px solid rgba(0,0,0,0.10)",
-      background: "rgba(255,255,255,0.8)",
+      background: "rgba(255,255,255,0.96)",
       fontSize: 12,
     },
-    grid2: {
+    muted: { opacity: 0.72 },
+    resultGrid: {
       display: "grid",
       gap: 12,
-      gridTemplateColumns: "1fr 1fr",
     },
-    muted: { opacity: 0.75 },
+    row: {
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap" as const,
+      alignItems: "center",
+    },
+    metricRow: {
+      display: "grid",
+      gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+      gap: 10,
+    },
+    metricCard: {
+      border: "1px solid rgba(0,0,0,0.08)",
+      borderRadius: 12,
+      padding: 12,
+      background: "rgba(0,0,0,0.02)",
+    },
     codeBlock: {
       margin: 0,
       overflow: "auto",
@@ -287,6 +326,31 @@ export default function GeneratePage() {
       borderRadius: 10,
       border: "1px solid rgba(0,0,0,0.10)",
       background: "rgba(0,0,0,0.02)",
+    },
+    compareRow: {
+      display: "grid",
+      gap: 6,
+      padding: 12,
+      borderRadius: 12,
+      border: "1px solid rgba(0,0,0,0.08)",
+      background: "rgba(0,0,0,0.02)",
+    },
+    compareGrid: {
+      display: "grid",
+      gap: 10,
+      gridTemplateColumns: "1fr 1fr",
+    },
+    htmlPreview: {
+      padding: 12,
+      borderRadius: 12,
+      border: "1px solid rgba(0,0,0,0.08)",
+      background: "rgba(0,0,0,0.02)",
+      whiteSpace: "pre-wrap" as const,
+    },
+    sectionSub: {
+      fontSize: 12,
+      opacity: 0.68,
+      marginBottom: 8,
     },
   };
 
@@ -341,23 +405,21 @@ export default function GeneratePage() {
   }) => {
     const status = diffLabel(before, after);
     return (
-      <div style={{ display: "grid", gap: 6 }}>
-        <div
-          style={{ display: "flex", justifyContent: "space-between", gap: 10 }}
-        >
-          <div style={{ fontSize: 12, opacity: 0.75 }}>{label}</div>
-          <span style={{ ...ui.badge, opacity: 0.9 }}>{status}</span>
+      <div style={ui.compareRow}>
+        <div style={{ display: "flex", justifyContent: "space-between", gap: 10 }}>
+          <div style={{ fontSize: 13, fontWeight: 600 }}>{label}</div>
+          <span style={ui.badge}>{status}</span>
         </div>
-        <div style={ui.grid2}>
+        <div style={ui.compareGrid}>
           <div style={{ ...ui.codeBlock, padding: 10 }}>
             <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
-              Before
+              Current
             </div>
             <div style={{ whiteSpace: "pre-wrap" }}>{before || "(empty)"}</div>
           </div>
           <div style={{ ...ui.codeBlock, padding: 10 }}>
             <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
-              After
+              Generated
             </div>
             <div style={{ whiteSpace: "pre-wrap" }}>{after || "(empty)"}</div>
           </div>
@@ -366,14 +428,43 @@ export default function GeneratePage() {
     );
   };
 
+  const draftDescriptionText = draft?.descriptionHtml
+    ? stripHtmlToText(draft.descriptionHtml)
+    : "";
+
+  const improvementCount = [
+    diffLabel(current?.title ?? "", draft?.title ?? ""),
+    diffLabel((current?.tags ?? []).join(", "), (draft?.tags ?? []).join(", ")),
+    diffLabel(current?.seo?.title ?? "", draft?.seo?.title ?? ""),
+    diffLabel(
+      current?.seo?.description ?? "",
+      draft?.seo?.description ?? "",
+    ),
+    diffLabel(
+      excerpt(current?.descriptionHtml ?? null, 180),
+      excerpt(draft?.descriptionHtml ?? null, 180),
+    ),
+  ].filter((status) => status === "Updated" || status === "Added").length;
+
   return (
     <div style={ui.page}>
-      <h1 style={ui.heroTitle}>ListingMuse Merchandising Studio</h1>
-      <p style={ui.heroSub}>
-        Generate market-ready product copy for cross-border independent Shopify
-        stores. Compare changes side-by-side, then apply updates to your product
-        in Shopify.
-      </p>
+      <div style={ui.hero}>
+        <div style={{ display: "grid", gap: 8 }}>
+          <h1 style={ui.heroTitle}>ListingMuse</h1>
+          <p style={ui.heroSub}>
+            Turn rough product data into conversion-ready Shopify listings for
+            cross-border stores. Generate polished copy first, review only what
+            matters, then publish with one click.
+          </p>
+        </div>
+
+        <div style={ui.heroStats}>
+          <Badge>English output</Badge>
+          <Badge>Cross-border ready</Badge>
+          <Badge>Shopify apply flow</Badge>
+          {draft?.meta?.providerId ? <Badge>{draft.meta.providerId}</Badge> : null}
+        </div>
+      </div>
 
       <div style={ui.navRow}>
         <Link to="/app/batch" style={ui.navPill}>
@@ -382,54 +473,50 @@ export default function GeneratePage() {
         <Link to="/app/settings" style={ui.navPill}>
           Settings
         </Link>
-        {generateResult?.generationId && (
-          <span style={{ ...ui.badge, opacity: 0.9 }}>
-            Draft ID: {generateResult.generationId}
-          </span>
-        )}
+        {generateResult?.generationId ? (
+          <span style={ui.badge}>Draft ID: {generateResult.generationId}</span>
+        ) : null}
       </div>
 
       <div style={ui.layout}>
-        <div style={{ display: "grid", gap: 12 }}>
+        <div style={ui.sidebar}>
           <div style={ui.card}>
-            <div style={ui.sectionTitle}>Product</div>
+            <div style={ui.sectionTitle}>1. Choose product</div>
             <div style={{ display: "grid", gap: 10 }}>
               <label style={ui.label}>
-                <span>Product ID (recommended)</span>
+                <span>Shopify Product ID</span>
                 <input
                   value={productId}
                   onChange={(e) => setProductId(e.currentTarget.value)}
-                  placeholder="gid://shopify/Product/1234567890 (or just 1234567890)"
+                  placeholder="gid://shopify/Product/1234567890 or 1234567890"
                   style={ui.input}
                 />
               </label>
 
-              <div style={{ display: "grid", gap: 10 }}>
-                <label style={ui.label}>
-                  <span>Title override (optional)</span>
-                  <input
-                    value={titleOverride}
-                    onChange={(e) => setTitleOverride(e.currentTarget.value)}
-                    placeholder="Leave empty to use Shopify title"
-                    style={ui.input}
-                  />
-                </label>
+              <label style={ui.label}>
+                <span>Title override</span>
+                <input
+                  value={titleOverride}
+                  onChange={(e) => setTitleOverride(e.currentTarget.value)}
+                  placeholder="Optional: force a starting title"
+                  style={ui.input}
+                />
+              </label>
 
-                <label style={ui.label}>
-                  <span>Image URL override (optional)</span>
-                  <input
-                    value={imageUrlOverride}
-                    onChange={(e) => setImageUrlOverride(e.currentTarget.value)}
-                    placeholder="Leave empty to use Shopify image"
-                    style={ui.input}
-                  />
-                </label>
-              </div>
+              <label style={ui.label}>
+                <span>Image URL override</span>
+                <input
+                  value={imageUrlOverride}
+                  onChange={(e) => setImageUrlOverride(e.currentTarget.value)}
+                  placeholder="Optional: use a specific hero image"
+                  style={ui.input}
+                />
+              </label>
             </div>
           </div>
 
           <div style={ui.card}>
-            <div style={ui.sectionTitle}>Generation settings</div>
+            <div style={ui.sectionTitle}>2. Generation settings</div>
             <div style={{ display: "grid", gap: 10 }}>
               <label style={ui.label}>
                 <span>Language</span>
@@ -462,9 +549,7 @@ export default function GeneratePage() {
                   }
                   style={ui.select}
                 >
-                  <option value="cross-border">
-                    Cross-border (independent stores)
-                  </option>
+                  <option value="cross-border">Cross-border independent stores</option>
                 </select>
               </label>
 
@@ -491,7 +576,7 @@ export default function GeneratePage() {
           </div>
 
           <div style={ui.card}>
-            <div style={ui.sectionTitle}>Generate</div>
+            <div style={ui.sectionTitle}>3. Generate</div>
             <div style={{ display: "grid", gap: 10 }}>
               <button
                 type="button"
@@ -502,229 +587,201 @@ export default function GeneratePage() {
                   ...(!canGenerate || isGenerating ? ui.buttonDisabled : {}),
                 }}
               >
-                {isGenerating ? "Generating..." : "Generate draft"}
+                {isGenerating ? "Generating..." : "Generate optimized listing"}
               </button>
 
-              {!canGenerate && (
+              {!canGenerate ? (
                 <div style={ui.muted}>
-                  Provide a product ID or at least a title/image.
+                  Add a product ID or provide at least a title/image.
                 </div>
-              )}
+              ) : null}
 
-              {generateResult?.ok === false && (
-                <div style={{ color: "#a00" }}>
-                  {generateResult.error ?? "Failed"}
-                  {generateResult.paywall?.billingUrl && (
-                    <span style={{ marginLeft: 10 }}>
-                      <Link to={generateResult.paywall.billingUrl}>
-                        Go to billing
-                      </Link>
-                    </span>
-                  )}
+              {generateResult?.ok === false ? (
+                <div style={{ color: "#a00", display: "grid", gap: 6 }}>
+                  <div>{generateResult.error ?? "Failed"}</div>
+                  {generateResult.paywall?.billingUrl ? (
+                    <Link to={generateResult.paywall.billingUrl}>Go to billing</Link>
+                  ) : null}
                 </div>
-              )}
-
-              <div
-                style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}
-              >
-                <Badge>English</Badge>
-                <Badge>Cross-border</Badge>
-                <Badge>
-                  {settings.tone === "conversion" ? "Conversion" : "Neutral"}
-                </Badge>
-                {draft?.meta?.providerId && (
-                  <Badge>{draft.meta.providerId}</Badge>
-                )}
-              </div>
+              ) : null}
             </div>
           </div>
         </div>
 
-        <div style={{ display: "grid", gap: 12 }}>
-          <Panel title="Before → After">
-            <div style={{ display: "grid", gap: 12 }}>
-              <CompareRow
-                label="Title"
-                before={current?.title ?? ""}
-                after={draft?.title ?? ""}
-              />
-              <CompareRow
-                label="Tags"
-                before={(current?.tags ?? []).join(", ")}
-                after={(draft?.tags ?? []).join(", ")}
-              />
-              <CompareRow
-                label="SEO title"
-                before={current?.seo?.title ?? ""}
-                after={draft?.seo?.title ?? ""}
-              />
-              <CompareRow
-                label="SEO description"
-                before={current?.seo?.description ?? ""}
-                after={draft?.seo?.description ?? ""}
-              />
-
-              <CompareRow
-                label="Description excerpt"
-                before={excerpt(current?.descriptionHtml ?? null, 180)}
-                after={excerpt(draft?.descriptionHtml ?? null, 180)}
-              />
+        <div style={ui.resultGrid}>
+          <div style={ui.card}>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "start", flexWrap: "wrap" }}>
+              <div style={{ display: "grid", gap: 6 }}>
+                <div style={ui.sectionTitle}>Optimized listing</div>
+                <div style={ui.sectionSub}>
+                  Show the result first. Use compare only when you want to inspect changes.
+                </div>
+              </div>
+              <div style={ui.row}>
+                {draft ? (
+                  <button
+                    type="button"
+                    style={ui.buttonSecondary}
+                    onClick={() => setShowCompare((v) => !v)}
+                  >
+                    {showCompare ? "Hide changes" : "Compare with current"}
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={apply}
+                  disabled={!canApply || isApplying}
+                  style={{
+                    ...ui.buttonSuccess,
+                    ...(!canApply || isApplying ? ui.buttonDisabled : {}),
+                  }}
+                >
+                  {isApplying ? "Applying..." : "Apply to Shopify"}
+                </button>
+              </div>
             </div>
 
-            <div style={{ marginTop: 12, display: "grid", gap: 10 }}>
-              <details>
-                <summary style={{ cursor: "pointer", opacity: 0.85 }}>
-                  Raw HTML (current)
-                </summary>
-                <pre style={ui.codeBlock}>
-                  <code>{current?.descriptionHtml ?? "(empty)"}</code>
-                </pre>
-              </details>
-              <details>
-                <summary style={{ cursor: "pointer", opacity: 0.85 }}>
-                  Raw HTML (draft)
-                </summary>
-                <pre style={ui.codeBlock}>
-                  <code>{draft?.descriptionHtml ?? "(empty)"}</code>
-                </pre>
-              </details>
-            </div>
-          </Panel>
-
-          <Panel title="Draft output">
             {!draft ? (
-              <div style={ui.muted}>No draft yet.</div>
+              <div style={{ ...ui.muted, marginTop: 10 }}>
+                No draft yet. Generate a listing to preview the customer-facing result.
+              </div>
             ) : (
-              <div style={{ display: "grid", gap: 12 }}>
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>Title</div>
-                  <div style={{ fontSize: 16, fontWeight: 700 }}>
+              <div style={{ display: "grid", gap: 14, marginTop: 14 }}>
+                <div style={ui.metricRow}>
+                  <div style={ui.metricCard}>
+                    <div style={{ fontSize: 12, opacity: 0.68 }}>Improved fields</div>
+                    <div style={{ fontSize: 24, fontWeight: 800 }}>{improvementCount}</div>
+                  </div>
+                  <div style={ui.metricCard}>
+                    <div style={{ fontSize: 12, opacity: 0.68 }}>Bullet points</div>
+                    <div style={{ fontSize: 24, fontWeight: 800 }}>{draft.bulletPoints.length}</div>
+                  </div>
+                  <div style={ui.metricCard}>
+                    <div style={{ fontSize: 12, opacity: 0.68 }}>Tags</div>
+                    <div style={{ fontSize: 24, fontWeight: 800 }}>{draft.tags.length}</div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={ui.sectionSub}>Title</div>
+                  <div style={{ fontSize: 22, fontWeight: 800, lineHeight: 1.15 }}>
                     {draft.title}
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>
-                    Bullet points
-                  </div>
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={ui.sectionSub}>Selling points</div>
                   {draft.bulletPoints.length === 0 ? (
-                    <div style={ui.muted}>(none)</div>
+                    <div style={ui.muted}>No bullet points generated.</div>
                   ) : (
-                    <ul style={{ margin: 0, paddingLeft: 18 }}>
-                      {draft.bulletPoints.map((b) => (
-                        <li key={b} style={{ margin: "6px 0" }}>
-                          {b}
-                        </li>
+                    <ul style={{ margin: 0, paddingLeft: 20, display: "grid", gap: 8 }}>
+                      {draft.bulletPoints.map((bullet) => (
+                        <li key={bullet}>{bullet}</li>
                       ))}
                     </ul>
                   )}
                 </div>
 
-                <div style={{ display: "grid", gap: 6 }}>
-                  <div style={{ fontSize: 12, opacity: 0.7 }}>Tags</div>
-                  <div
-                    style={{
-                      display: "flex",
-                      gap: 8,
-                      flexWrap: "wrap" as const,
-                    }}
-                  >
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={ui.sectionSub}>Product description</div>
+                  <div style={ui.htmlPreview}>{draftDescriptionText || "(empty)"}</div>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={ui.sectionSub}>SEO</div>
+                  <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
+                    <div style={{ ...ui.codeBlock, padding: 12 }}>
+                      <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>SEO title</div>
+                      {draft.seo.title}
+                    </div>
+                    <div style={{ ...ui.codeBlock, padding: 12 }}>
+                      <div style={{ fontSize: 11, opacity: 0.7, marginBottom: 6 }}>
+                        SEO description
+                      </div>
+                      {draft.seo.description}
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{ display: "grid", gap: 8 }}>
+                  <div style={ui.sectionSub}>Tags</div>
+                  <div style={ui.row}>
                     {draft.tags.length ? (
-                      draft.tags.map((t) => <Chip key={t}>{t}</Chip>)
+                      draft.tags.map((tag) => <Chip key={tag}>{tag}</Chip>)
                     ) : (
                       <span style={ui.muted}>(none)</span>
                     )}
                   </div>
                 </div>
 
-                <div style={ui.grid2}>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>SEO title</div>
-                    <div style={{ ...ui.codeBlock, padding: 10 }}>
-                      {draft.seo.title}
-                    </div>
+                {applyResult?.ok ? (
+                  <div style={{ color: "#0b7a43", fontWeight: 700 }}>
+                    Applied to {applyResult.appliedToProductId}
                   </div>
-                  <div style={{ display: "grid", gap: 6 }}>
-                    <div style={{ fontSize: 12, opacity: 0.7 }}>
-                      SEO description
-                    </div>
-                    <div style={{ ...ui.codeBlock, padding: 10 }}>
-                      {draft.seo.description}
-                    </div>
+                ) : null}
+
+                {applyResult?.ok === false ? (
+                  <div style={{ color: "#a00", display: "grid", gap: 6 }}>
+                    <div>{applyResult.error ?? "Failed"}</div>
+                    {applyResult.paywall?.billingUrl ? (
+                      <Link to={applyResult.paywall.billingUrl}>Go to billing</Link>
+                    ) : null}
                   </div>
-                </div>
+                ) : null}
+              </div>
+            )}
+          </div>
+
+          {draft && showCompare ? (
+            <div style={ui.card}>
+              <div style={ui.sectionTitle}>Change review</div>
+              <div style={ui.sectionSub}>
+                Keep this secondary. Merchants should focus on the generated result, then inspect the diff only when needed.
+              </div>
+
+              <div style={{ display: "grid", gap: 12, marginTop: 12 }}>
+                <CompareRow
+                  label="Title"
+                  before={current?.title ?? ""}
+                  after={draft.title ?? ""}
+                />
+                <CompareRow
+                  label="Tags"
+                  before={(current?.tags ?? []).join(", ")}
+                  after={(draft?.tags ?? []).join(", ")}
+                />
+                <CompareRow
+                  label="SEO title"
+                  before={current?.seo?.title ?? ""}
+                  after={draft?.seo?.title ?? ""}
+                />
+                <CompareRow
+                  label="SEO description"
+                  before={current?.seo?.description ?? ""}
+                  after={draft?.seo?.description ?? ""}
+                />
+                <CompareRow
+                  label="Description excerpt"
+                  before={excerpt(current?.descriptionHtml ?? null, 180)}
+                  after={excerpt(draft?.descriptionHtml ?? null, 180)}
+                />
 
                 <details>
                   <summary style={{ cursor: "pointer", opacity: 0.85 }}>
-                    Debug payload
+                    Raw HTML
                   </summary>
-                  <pre style={ui.codeBlock}>
-                    <code>{JSON.stringify(generateResult, null, 2)}</code>
-                  </pre>
+                  <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+                    <pre style={ui.codeBlock}>
+                      <code>{current?.descriptionHtml ?? "(empty current)"}</code>
+                    </pre>
+                    <pre style={ui.codeBlock}>
+                      <code>{draft?.descriptionHtml ?? "(empty generated)"}</code>
+                    </pre>
+                  </div>
                 </details>
               </div>
-            )}
-          </Panel>
-
-          <Panel title="Apply to Shopify">
-            <div style={{ display: "grid", gap: 10 }}>
-              <div style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, opacity: 0.7 }}>
-                  Ready checklist
-                </div>
-                <div
-                  style={{ display: "flex", gap: 8, flexWrap: "wrap" as const }}
-                >
-                  <Badge>
-                    {productId.trim() ? "Product ID set" : "Product ID missing"}
-                  </Badge>
-                  <Badge>
-                    {generateResult?.generationId
-                      ? "Draft generated"
-                      : "Draft not generated"}
-                  </Badge>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={apply}
-                disabled={!canApply || isApplying}
-                style={{
-                  ...ui.buttonPrimary,
-                  background: "#0b5",
-                  ...(!canApply || isApplying ? ui.buttonDisabled : {}),
-                }}
-              >
-                {isApplying ? "Applying..." : "Apply draft"}
-              </button>
-
-              {!canApply && (
-                <div style={ui.muted}>
-                  Need a product ID and a generated draft.
-                </div>
-              )}
-
-              {applyResult?.ok === false && (
-                <div style={{ color: "#a00" }}>
-                  {applyResult.error ?? "Failed"}
-                  {applyResult.paywall?.billingUrl && (
-                    <span style={{ marginLeft: 10 }}>
-                      <Link to={applyResult.paywall.billingUrl}>
-                        Go to billing
-                      </Link>
-                    </span>
-                  )}
-                </div>
-              )}
-
-              {applyResult?.ok && (
-                <div style={{ color: "#084" }}>
-                  Applied to {applyResult.appliedToProductId}
-                </div>
-              )}
             </div>
-          </Panel>
+          ) : null}
         </div>
       </div>
     </div>
