@@ -838,33 +838,51 @@ export default function GeneratePage() {
 
                 <label style={ui.label}>
                   <span>Title</span>
-                  <input style={{ ...ui.input, ...(hasTitleError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.title} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, title: e.currentTarget.value } : draftState))} />
+                  <input style={{ ...ui.input, ...(hasTitleError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.title} onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setEditableDraft((draftState) => (draftState ? { ...draftState, title: value } : draftState));
+                  }} />
                 </label>
 
                 <label style={ui.label}>
                   <span>Product description</span>
-                  <textarea style={{ ...ui.textarea, minHeight: 180, ...(hasDescriptionError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.descriptionHtml} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, descriptionHtml: e.currentTarget.value } : draftState))} />
+                  <textarea style={{ ...ui.textarea, minHeight: 180, ...(hasDescriptionError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.descriptionHtml} onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setEditableDraft((draftState) => (draftState ? { ...draftState, descriptionHtml: value } : draftState));
+                  }} />
                 </label>
 
                 <label style={ui.label}>
                   <span>Bullet points (one per line)</span>
-                  <textarea style={ui.textarea} value={editableDraft.bulletPointsText} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, bulletPointsText: e.currentTarget.value } : draftState))} />
+                  <textarea style={ui.textarea} value={editableDraft.bulletPointsText} onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setEditableDraft((draftState) => (draftState ? { ...draftState, bulletPointsText: value } : draftState));
+                  }} />
                 </label>
 
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
                   <label style={ui.label}>
                     <span>SEO title</span>
-                    <input style={{ ...ui.input, ...(hasSeoTitleError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.seoTitle} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoTitle: e.currentTarget.value } : draftState))} />
+                    <input style={{ ...ui.input, ...(hasSeoTitleError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.seoTitle} onChange={(e) => {
+                      const value = e.currentTarget.value;
+                      setEditableDraft((draftState) => (draftState ? { ...draftState, seoTitle: value } : draftState));
+                    }} />
                   </label>
                   <label style={ui.label}>
                     <span>SEO description</span>
-                    <textarea style={{ ...ui.textarea, minHeight: 96, ...(hasSeoDescriptionError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.seoDescription} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoDescription: e.currentTarget.value } : draftState))} />
+                    <textarea style={{ ...ui.textarea, minHeight: 96, ...(hasSeoDescriptionError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.seoDescription} onChange={(e) => {
+                      const value = e.currentTarget.value;
+                      setEditableDraft((draftState) => (draftState ? { ...draftState, seoDescription: value } : draftState));
+                    }} />
                   </label>
                 </div>
 
                 <label style={ui.label}>
                   <span>Tags (comma separated)</span>
-                  <input style={{ ...ui.input, ...(hasTagsError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.tagsText} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, tagsText: e.currentTarget.value } : draftState))} />
+                  <input style={{ ...ui.input, ...(hasTagsError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.tagsText} onChange={(e) => {
+                    const value = e.currentTarget.value;
+                    setEditableDraft((draftState) => (draftState ? { ...draftState, tagsText: value } : draftState));
+                  }} />
                 </label>
 
                 <div style={{ display: "grid", gap: 8 }}>
