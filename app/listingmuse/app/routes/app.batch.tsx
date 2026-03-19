@@ -50,6 +50,7 @@ type BatchRow = {
   generatedTags?: string[];
   error?: string;
   paywall?: BatchGenerateResponse["paywall"];
+  completedAt?: string;
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -130,6 +131,11 @@ export default function BatchPage() {
 
   const retryableRows = useMemo(
     () => rows.filter((row) => row.status === "error"),
+    [rows],
+  );
+
+  const activeRow = useMemo(
+    () => rows.find((row) => row.status === "running") ?? null,
     [rows],
   );
 
@@ -239,6 +245,7 @@ export default function BatchPage() {
                   generatedTags: data.listing?.tags ?? [],
                   error: undefined,
                   paywall: undefined,
+                  completedAt: new Date().toISOString(),
                 }
               : item,
           ),
@@ -518,7 +525,20 @@ export default function BatchPage() {
             </div>
 
             <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
-              {batchMessage ? <div style={ui.successNotice}>{batchMessage}</div> : null}
+              {isRunning && activeRow ? (
+                <div style={ui.notice}>
+                  Generating listings now. Currently processing <strong>{activeRow.product.title}</strong>.
+                </div>
+              ) : null}
+              {batchMessage ? (
+                <div style={ui.successNotice}>
+                  <div>{batchMessage}</div>
+                  <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                    <Link to="/app">Open single-item editor</Link>
+                    <Link to="/app/settings">Review settings</Link>
+                  </div>
+                </div>
+              ) : null}
               {batchError ? <div style={ui.errorNotice}>{batchError}</div> : null}
               {batchPaywall?.billingUrl ? (
                 <div style={ui.notice}>
@@ -554,6 +574,13 @@ export default function BatchPage() {
                       </div>
                     ) : null}
                     {row.generationId ? <div style={{ fontSize: 12, opacity: 0.72 }}>Draft ID: {row.generationId}</div> : null}
+                    {row.completedAt ? <div style={{ fontSize: 12, opacity: 0.72 }}>Ready for review just now.</div> : null}
+                    {row.status === "running" ? <div style={ui.notice}>Generating copy for this product…</div> : null}
+                    {row.status === "done" ? (
+                      <div style={ui.successNotice}>
+                        Listing draft ready. <Link to="/app">Open editor</Link> to review and apply the final copy.
+                      </div>
+                    ) : null}
                     {row.error ? <div style={ui.errorNotice}>{row.error}</div> : null}
                     {row.paywall?.billingUrl ? (
                       <div style={ui.notice}>

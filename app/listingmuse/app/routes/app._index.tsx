@@ -148,6 +148,7 @@ export default function GeneratePage() {
   const [editableDraft, setEditableDraft] = useState<EditableDraft | null>(null);
   const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
   const [validationMessage, setValidationMessage] = useState<string | null>(null);
+  const [generationSuccessMessage, setGenerationSuccessMessage] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<ListingGenerationSettings>({
     language: "en",
@@ -255,6 +256,7 @@ export default function GeneratePage() {
     if (isGenerating) return;
 
     setValidationMessage(null);
+    setGenerationSuccessMessage(null);
     setIsGenerating(true);
     setApplyResult(null);
     setGenerateResult(null);
@@ -279,6 +281,7 @@ export default function GeneratePage() {
       setShowCompare(false);
       if (data.listing) {
         setEditableDraft(toEditableDraft(data.listing));
+        setGenerationSuccessMessage("Draft generated successfully. Review the copy below, then apply it to Shopify when ready.");
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
@@ -329,6 +332,7 @@ export default function GeneratePage() {
 
     setIsApplying(true);
     setApplyResult(null);
+    setGenerationSuccessMessage(null);
 
     try {
       const response = await fetch("/app/api/apply", {
@@ -775,6 +779,13 @@ export default function GeneratePage() {
               </button>
               {!canGenerate ? <div style={ui.muted}>Pick a product or provide manual title/image input.</div> : null}
               {restoreMessage ? <div style={ui.infoNotice}>{restoreMessage}</div> : null}
+              {isGenerating ? <div style={ui.infoNotice}>Generating your optimized listing now. Keep this page open while we prepare the draft.</div> : null}
+              {generationSuccessMessage ? (
+                <div style={ui.successNotice}>
+                  <div>{generationSuccessMessage}</div>
+                  <div style={{ marginTop: 6 }}>Next step: refine the draft in the editor, then apply it to Shopify.</div>
+                </div>
+              ) : null}
               {generateResult?.ok === false ? (
                 <div style={ui.errorNotice}>
                   <div>{generateResult.error ?? "Failed"}</div>
@@ -865,7 +876,22 @@ export default function GeneratePage() {
                   </div>
                 </div>
 
-                {applyResult?.ok ? <div style={ui.successNotice}>Applied to {applyResult.appliedToProductId}</div> : null}
+                {isApplying ? <div style={ui.infoNotice}>Applying the approved copy back to Shopify now…</div> : null}
+                {applyResult?.ok ? (
+                  <div style={ui.successNotice}>
+                    <div>Applied to {applyResult.appliedToProductId}</div>
+                    <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                      <Link to="/app/batch">Back to batch workspace</Link>
+                      <button type="button" style={ui.buttonSecondary} onClick={() => {
+                        setGenerateResult(null);
+                        setEditableDraft(null);
+                        setApplyResult(null);
+                        setGenerationSuccessMessage(null);
+                        setShowCompare(false);
+                      }}>Start another listing</button>
+                    </div>
+                  </div>
+                ) : null}
                 {applyResult?.ok === false ? (
                   <div style={ui.errorNotice}>
                     <div>{applyResult.error ?? "Failed"}</div>
