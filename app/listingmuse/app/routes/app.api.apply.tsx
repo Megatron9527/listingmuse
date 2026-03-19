@@ -86,6 +86,20 @@ const isRecord = (v: unknown): v is Record<string, unknown> => {
   return !!v && typeof v === "object" && !Array.isArray(v);
 };
 
+const formatUserErrorField = (field?: string[]) => {
+  if (!field?.length) return null;
+  const joined = field.join(".");
+  const labelMap: Record<string, string> = {
+    title: "Title",
+    descriptionHtml: "Description",
+    tags: "Tags",
+    seo: "SEO",
+    "seo.title": "SEO title",
+    "seo.description": "SEO description",
+  };
+  return labelMap[joined] ?? joined;
+};
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   return jsonResponse(
@@ -132,14 +146,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   const productIdInput = coerceString(payload.productId);
   if (!productIdInput) {
     return jsonResponse(
-      { ok: false, error: "Missing productId" },
+      {
+        ok: false,
+        error: "Select a Shopify product before applying the generated listing.",
+      },
       { status: 400 },
     );
   }
 
   const generationId = coerceString(payload.generationId);
+  if (!generationId && payload.generated == null) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Generate a draft first, then apply it to Shopify.",
+      },
+      { status: 400 },
+    );
+  }
 
-  // Load listing
   let listingUnknown: unknown = payload.generated;
   if (listingUnknown == null && generationId) {
     const gen = await prisma.generation.findUnique({
@@ -147,7 +172,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     });
     if (!gen) {
       return jsonResponse(
-        { ok: false, error: "generationId not found" },
+        {
+          ok: false,
+          error: "This draft could not be found. Generate a fresh listing and try again.",
+        },
         { status: 404 },
       );
     }
@@ -156,7 +184,10 @@ export const action = async ({ request }: ActionFunctionArgs) => {
 
   if (!isRecord(listingUnknown)) {
     return jsonResponse(
-      { ok: false, error: "Missing generated listing" },
+      {
+        ok: false,
+        error: "The generated draft is incomplete. Regenerate the listing before applying.",
+      },
       { status: 400 },
     );
   }
@@ -182,14 +213,16 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     !seoDescription
   ) {
     return jsonResponse(
-      { ok: false, error: "Nothing to apply" },
+      {
+        ok: false,
+        error: "The draft has no title, description, tags, or SEO fields to apply.",
+      },
       { status: 400 },
     );
   }
 
   const productGid = toProductGid(productIdInput);
 
-  // Apply to Shopify
   const resp = await (admin as unknown as AdminClient).graphql(
     `#graphql
     mutation ProductUpdateForListingMuse($input: ProductInput!) {
@@ -211,7 +244,7 @@ export const action = async ({ request }: ActionFunctionArgs) => {
           id: productGid,
           ...(title ? { title } : {}),
           ...(descriptionHtml ? { descriptionHtml } : {}),
-          ...(tags ? { tags } : {}),
+          ...(tags.length ? { tags } : {}),
           ...(seoTitle || seoDescription
             ? {
                 seo: {
@@ -226,23 +259,32 @@ export const action = async ({ request }: ActionFunctionArgs) => {
   );
 
   const json = (await resp.json()) as ProductUpdateResponse;
-  const userErrors = json.data?.productUpdate?.userErrors ?? [];
+  const userErrors = (json.data?.productUpdate?.userErrors ?? []).map((item) => ({
+    ...item,
+    fieldLabel: formatUserErrorField(item.field),
+  }));
   if (userErrors.length) {
     return jsonResponse(
-      { ok: false, error: "Shopify productUpdate failed", userErrors },
+      {
+        ok: false,
+        error: "Shopify rejected part of this update. Review the highlighted fields and try again.",
+        userErrors,
+      },
       { status: 400 },
     );
   }
   if (json.errors?.length) {
     return jsonResponse(
-      { ok: false, error: json.errors[0]?.message ?? "Shopify GraphQL error" },
+      {
+        ok: false,
+        error: json.errors[0]?.message ?? "Shopify GraphQL error",
+      },
       { status: 400 },
     );
   }
 
   const updatedProduct = json.data?.productUpdate?.product ?? null;
 
-  // Audit log
   const audit = await prisma.auditLog.create({
     data: {
       shopId: shop.id,

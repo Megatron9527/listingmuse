@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
+import { Link } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 
@@ -34,6 +35,11 @@ type BatchGenerateResponse = {
     seo: { title: string; description: string };
   };
   error?: string;
+  paywall?: {
+    billingUrl?: string;
+    checkoutPath?: string;
+    reason?: string;
+  };
 };
 
 type BatchRow = {
@@ -43,6 +49,7 @@ type BatchRow = {
   generatedTitle?: string;
   generatedTags?: string[];
   error?: string;
+  paywall?: BatchGenerateResponse["paywall"];
 };
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
@@ -58,6 +65,9 @@ export default function BatchPage() {
   const [isSearchingProducts, setIsSearchingProducts] = useState(false);
   const [productSearchError, setProductSearchError] = useState<string | null>(null);
   const [isRunning, setIsRunning] = useState(false);
+  const [batchMessage, setBatchMessage] = useState<string | null>(null);
+  const [batchError, setBatchError] = useState<string | null>(null);
+  const [batchPaywall, setBatchPaywall] = useState<BatchGenerateResponse["paywall"] | null>(null);
 
   const [settings, setSettings] = useState<ListingGenerationSettings>({
     language: "en",
@@ -110,6 +120,19 @@ export default function BatchPage() {
     [selectedProducts],
   );
 
+  const queueSummary = useMemo(() => {
+    const queued = rows.filter((row) => row.status === "queued").length;
+    const running = rows.filter((row) => row.status === "running").length;
+    const done = rows.filter((row) => row.status === "done").length;
+    const failed = rows.filter((row) => row.status === "error").length;
+    return { queued, running, done, failed, total: rows.length };
+  }, [rows]);
+
+  const retryableRows = useMemo(
+    () => rows.filter((row) => row.status === "error"),
+    [rows],
+  );
+
   const toggleProduct = (product: ProductPickerItem) => {
     setSelectedProducts((current) => {
       if (current.some((item) => item.id === product.id)) {
@@ -120,6 +143,9 @@ export default function BatchPage() {
   };
 
   const queueSelected = () => {
+    setBatchError(null);
+    setBatchMessage(null);
+    setBatchPaywall(null);
     setRows(
       selectedProducts.map((product) => ({
         product,
@@ -128,14 +154,52 @@ export default function BatchPage() {
     );
   };
 
-  const runBatch = async () => {
-    if (!rows.length || isRunning) return;
-    setIsRunning(true);
+  const clearCompleted = () => {
+    setRows((current) => current.filter((row) => row.status !== "done"));
+  };
 
-    for (const row of rows) {
+  const retryFailed = () => {
+    setBatchError(null);
+    setBatchMessage(null);
+    setBatchPaywall(null);
+    setRows((current) =>
+      current.map((row) =>
+        row.status === "error"
+          ? {
+              ...row,
+              status: "queued",
+              error: undefined,
+              paywall: undefined,
+            }
+          : row,
+      ),
+    );
+  };
+
+  const runBatch = async () => {
+    const pendingRows = rows.filter((row) => row.status === "queued" || row.status === "error");
+    if (!pendingRows.length || isRunning) return;
+
+    setIsRunning(true);
+    setBatchError(null);
+    setBatchMessage(null);
+    setBatchPaywall(null);
+
+    let doneCount = 0;
+    let failedCount = 0;
+    let blockedByBilling = false;
+
+    for (const row of pendingRows) {
       setRows((current) =>
         current.map((item) =>
-          item.product.id === row.product.id ? { ...item, status: "running", error: undefined } : item,
+          item.product.id === row.product.id
+            ? {
+                ...item,
+                status: "running",
+                error: undefined,
+                paywall: undefined,
+              }
+            : item,
         ),
       );
 
@@ -153,9 +217,17 @@ export default function BatchPage() {
 
         const data = (await response.json()) as BatchGenerateResponse;
         if (!response.ok || data.ok === false || !data.listing) {
-          throw new Error(data.error || "Generation failed");
+          const message =
+            data.error === "payment_required"
+              ? "Subscription required before batch generation can continue."
+              : data.error || "Generation failed";
+          const error = new Error(message);
+          (error as Error & { paywall?: BatchGenerateResponse["paywall"] }).paywall =
+            data.paywall;
+          throw error;
         }
 
+        doneCount += 1;
         setRows((current) =>
           current.map((item) =>
             item.product.id === row.product.id
@@ -165,11 +237,19 @@ export default function BatchPage() {
                   generationId: data.generationId,
                   generatedTitle: data.listing?.title,
                   generatedTags: data.listing?.tags ?? [],
+                  error: undefined,
+                  paywall: undefined,
                 }
               : item,
           ),
         );
       } catch (error) {
+        failedCount += 1;
+        const paywall = (error as Error & { paywall?: BatchGenerateResponse["paywall"] }).paywall;
+        if (paywall) {
+          blockedByBilling = true;
+          setBatchPaywall(paywall);
+        }
         setRows((current) =>
           current.map((item) =>
             item.product.id === row.product.id
@@ -177,11 +257,36 @@ export default function BatchPage() {
                   ...item,
                   status: "error",
                   error: error instanceof Error ? error.message : "Generation failed",
+                  paywall,
                 }
               : item,
           ),
         );
+
+        if (paywall) {
+          setRows((current) =>
+            current.map((item) =>
+              item.status === "queued"
+                ? {
+                    ...item,
+                    error: "Paused because billing must be activated before generation can continue.",
+                  }
+                : item,
+            ),
+          );
+          break;
+        }
       }
+    }
+
+    if (blockedByBilling) {
+      setBatchError("Batch paused because billing is inactive. Activate billing, then retry the remaining products.");
+    } else if (doneCount > 0 && failedCount > 0) {
+      setBatchMessage(`Batch finished with partial success: ${doneCount} generated, ${failedCount} failed.`);
+    } else if (doneCount > 0) {
+      setBatchMessage(`Batch completed successfully for ${doneCount} product${doneCount === 1 ? "" : "s"}.`);
+    } else if (failedCount > 0) {
+      setBatchError(`Batch finished with ${failedCount} failed product${failedCount === 1 ? "" : "s"}. Review the errors below and retry.`);
     }
 
     setIsRunning(false);
@@ -245,6 +350,15 @@ export default function BatchPage() {
       cursor: "pointer",
       fontWeight: 600,
     },
+    buttonDanger: {
+      padding: "10px 12px",
+      borderRadius: 10,
+      border: "1px solid rgba(160,0,0,0.16)",
+      background: "#fff5f5",
+      color: "#8f1111",
+      cursor: "pointer",
+      fontWeight: 700,
+    },
     buttonDisabled: { opacity: 0.55, cursor: "not-allowed" },
     muted: { opacity: 0.72 },
     pickerList: { display: "grid", gap: 8, marginTop: 10, maxHeight: 320, overflowY: "auto" as const },
@@ -266,6 +380,32 @@ export default function BatchPage() {
       border: "1px solid rgba(0,0,0,0.10)",
       background: "rgba(0,0,0,0.03)",
       fontSize: 12,
+    },
+    notice: {
+      borderRadius: 12,
+      padding: 12,
+      border: "1px solid rgba(0,0,0,0.10)",
+      background: "rgba(0,0,0,0.03)",
+      fontSize: 13,
+      lineHeight: 1.45,
+    },
+    errorNotice: {
+      borderRadius: 12,
+      padding: 12,
+      border: "1px solid rgba(160,0,0,0.18)",
+      background: "#fff5f5",
+      color: "#8f1111",
+      fontSize: 13,
+      lineHeight: 1.45,
+    },
+    successNotice: {
+      borderRadius: 12,
+      padding: 12,
+      border: "1px solid rgba(11,122,67,0.18)",
+      background: "#f1fbf6",
+      color: "#0b7a43",
+      fontSize: 13,
+      lineHeight: 1.45,
     },
   };
 
@@ -314,7 +454,14 @@ export default function BatchPage() {
               </div>
 
               {isSearchingProducts ? <div style={ui.muted}>Loading products...</div> : null}
-              {productSearchError ? <div style={{ color: "#a00" }}>{productSearchError}</div> : null}
+              {!isSearchingProducts && !productSearchError && productResults.length === 0 ? (
+                <div style={ui.notice}>
+                  {productSearch.trim()
+                    ? "No matching active Shopify products found. Try a broader keyword."
+                    : "No active Shopify products available to queue yet."}
+                </div>
+              ) : null}
+              {productSearchError ? <div style={ui.errorNotice}>{productSearchError}</div> : null}
             </div>
           </div>
 
@@ -345,7 +492,13 @@ export default function BatchPage() {
                   Queue {selectedProducts.length || "selected"}
                 </button>
                 <button type="button" style={{ ...ui.buttonPrimary, ...(!rows.length || isRunning ? ui.buttonDisabled : {}) }} disabled={!rows.length || isRunning} onClick={runBatch}>
-                  {isRunning ? "Generating..." : `Run batch (${rows.length})`}
+                  {isRunning ? "Generating..." : `Run batch (${rows.filter((row) => row.status === "queued" || row.status === "error").length || rows.length})`}
+                </button>
+                <button type="button" style={{ ...ui.buttonSecondary, ...(retryableRows.length === 0 || isRunning ? ui.buttonDisabled : {}) }} disabled={retryableRows.length === 0 || isRunning} onClick={retryFailed}>
+                  Retry failed ({retryableRows.length})
+                </button>
+                <button type="button" style={{ ...ui.buttonDanger, ...(queueSummary.done === 0 || isRunning ? ui.buttonDisabled : {}) }} disabled={queueSummary.done === 0 || isRunning} onClick={clearCompleted}>
+                  Clear completed ({queueSummary.done})
                 </button>
               </div>
             </div>
@@ -354,11 +507,32 @@ export default function BatchPage() {
 
         <div style={{ display: "grid", gap: 12 }}>
           <div style={ui.card}>
-            <div style={ui.sectionTitle}>Batch queue</div>
+            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={ui.sectionTitle}>Batch queue</div>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <span style={ui.statusBadge}>Queued {queueSummary.queued}</span>
+                <span style={ui.statusBadge}>Running {queueSummary.running}</span>
+                <span style={ui.statusBadge}>Done {queueSummary.done}</span>
+                <span style={ui.statusBadge}>Failed {queueSummary.failed}</span>
+              </div>
+            </div>
+
+            <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {batchMessage ? <div style={ui.successNotice}>{batchMessage}</div> : null}
+              {batchError ? <div style={ui.errorNotice}>{batchError}</div> : null}
+              {batchPaywall?.billingUrl ? (
+                <div style={ui.notice}>
+                  Billing must be activated before the remaining products can be generated. <Link to={batchPaywall.billingUrl}>Open billing</Link>
+                </div>
+              ) : null}
+            </div>
+
             {!rows.length ? (
-              <div style={ui.muted}>No products queued yet. Select products on the left, then queue them for generation.</div>
+              <div style={{ ...ui.notice, marginTop: 10 }}>
+                No products queued yet. Select products on the left, then queue them for generation.
+              </div>
             ) : (
-              <div style={{ display: "grid", gap: 10 }}>
+              <div style={{ display: "grid", gap: 10, marginTop: 12 }}>
                 {rows.map((row) => (
                   <div key={row.product.id} style={{ border: "1px solid rgba(0,0,0,0.10)", borderRadius: 12, padding: 12, background: "rgba(0,0,0,0.02)", display: "grid", gap: 8 }}>
                     <div style={{ display: "flex", justifyContent: "space-between", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -380,7 +554,12 @@ export default function BatchPage() {
                       </div>
                     ) : null}
                     {row.generationId ? <div style={{ fontSize: 12, opacity: 0.72 }}>Draft ID: {row.generationId}</div> : null}
-                    {row.error ? <div style={{ color: "#a00" }}>{row.error}</div> : null}
+                    {row.error ? <div style={ui.errorNotice}>{row.error}</div> : null}
+                    {row.paywall?.billingUrl ? (
+                      <div style={ui.notice}>
+                        This item is blocked by billing. <Link to={row.paywall.billingUrl}>Go to billing</Link>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>

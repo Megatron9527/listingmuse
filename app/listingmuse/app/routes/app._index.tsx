@@ -68,7 +68,7 @@ type ApplyResponse = {
   auditLogId?: string;
   appliedToProductId?: string;
   error?: string;
-  userErrors?: Array<{ field?: string[]; message: string }>;
+  userErrors?: Array<{ field?: string[]; fieldLabel?: string | null; message: string }>;
   paywall?: {
     billingUrl?: string;
     checkoutPath?: string;
@@ -81,6 +81,19 @@ type ProductSearchResponse = {
   products?: ProductPickerItem[];
   error?: string;
 };
+
+type PersistedDraftState = {
+  productId: string;
+  titleOverride: string;
+  imageUrlOverride: string;
+  settings: ListingGenerationSettings;
+  generateResult: GenerateResponse | null;
+  editableDraft: EditableDraft | null;
+  showCompare: boolean;
+  savedAt: string;
+};
+
+const DRAFT_STORAGE_KEY = "listingmuse-single-draft-v1";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
@@ -108,6 +121,21 @@ const splitTags = (value: string) =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  !!value && typeof value === "object" && !Array.isArray(value);
+
+const parsePersistedDraftState = (raw: string | null): PersistedDraftState | null => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as PersistedDraftState;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (typeof parsed.productId !== "string") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+};
+
 export default function GeneratePage() {
   const [productId, setProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -118,6 +146,8 @@ export default function GeneratePage() {
   const [imageUrlOverride, setImageUrlOverride] = useState("");
   const [showCompare, setShowCompare] = useState(false);
   const [editableDraft, setEditableDraft] = useState<EditableDraft | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
+  const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<ListingGenerationSettings>({
     language: "en",
@@ -132,6 +162,21 @@ export default function GeneratePage() {
     null,
   );
   const [applyResult, setApplyResult] = useState<ApplyResponse | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = parsePersistedDraftState(window.localStorage.getItem(DRAFT_STORAGE_KEY));
+    if (!saved) return;
+
+    setProductId(saved.productId ?? "");
+    setTitleOverride(saved.titleOverride ?? "");
+    setImageUrlOverride(saved.imageUrlOverride ?? "");
+    setSettings(saved.settings ?? { language: "en", market: "cross-border", tone: "conversion" });
+    setGenerateResult(saved.generateResult ?? null);
+    setEditableDraft(saved.editableDraft ?? null);
+    setShowCompare(Boolean(saved.showCompare));
+    setRestoreMessage("Recovered your last draft after refresh. You can continue editing or apply it now.");
+  }, []);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -173,6 +218,27 @@ export default function GeneratePage() {
     };
   }, [productSearch]);
 
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldPersist = Boolean(productId || titleOverride || imageUrlOverride || generateResult || editableDraft);
+    if (!shouldPersist) {
+      window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+      return;
+    }
+
+    const payload: PersistedDraftState = {
+      productId,
+      titleOverride,
+      imageUrlOverride,
+      settings,
+      generateResult,
+      editableDraft,
+      showCompare,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
+  }, [editableDraft, generateResult, imageUrlOverride, productId, settings, showCompare, titleOverride]);
+
   const canGenerate = useMemo(() => {
     return Boolean(
       productId.trim() || titleOverride.trim() || imageUrlOverride.trim(),
@@ -180,14 +246,20 @@ export default function GeneratePage() {
   }, [imageUrlOverride, productId, titleOverride]);
 
   const canApply = useMemo(() => {
-    return Boolean(productId.trim()) && Boolean(generateResult?.generationId);
-  }, [generateResult?.generationId, productId]);
+    return Boolean(productId.trim()) && Boolean(generateResult?.generationId) && Boolean(editableDraft);
+  }, [editableDraft, generateResult?.generationId, productId]);
+
+  const selectedProduct = productResults.find((product) => product.id === productId);
 
   const generate = async () => {
+    if (isGenerating) return;
+
+    setValidationMessage(null);
     setIsGenerating(true);
     setApplyResult(null);
     setGenerateResult(null);
     setEditableDraft(null);
+    setRestoreMessage(null);
 
     try {
       const response = await fetch("/app/api/generate", {
@@ -217,7 +289,43 @@ export default function GeneratePage() {
   };
 
   const apply = async () => {
-    if (!generateResult?.generationId) return;
+    if (isApplying) return;
+
+    setValidationMessage(null);
+
+    if (!productId.trim()) {
+      setApplyResult({ ok: false, error: "Select a Shopify product before applying the draft." });
+      return;
+    }
+    if (!generateResult?.generationId) {
+      setApplyResult({ ok: false, error: "Generate a draft first, then apply it to Shopify." });
+      return;
+    }
+    if (!editableDraft) {
+      setApplyResult({ ok: false, error: "The draft is missing. Regenerate the listing before applying." });
+      return;
+    }
+
+    const normalizedDraft = {
+      title: editableDraft.title.trim(),
+      descriptionHtml: editableDraft.descriptionHtml.trim(),
+      tags: splitTags(editableDraft.tagsText),
+      seo: {
+        title: editableDraft.seoTitle.trim(),
+        description: editableDraft.seoDescription.trim(),
+      },
+    };
+
+    if (
+      !normalizedDraft.title &&
+      !normalizedDraft.descriptionHtml &&
+      normalizedDraft.tags.length === 0 &&
+      !normalizedDraft.seo.title &&
+      !normalizedDraft.seo.description
+    ) {
+      setApplyResult({ ok: false, error: "The draft is empty. Add content or regenerate before applying." });
+      return;
+    }
 
     setIsApplying(true);
     setApplyResult(null);
@@ -230,22 +338,16 @@ export default function GeneratePage() {
         body: JSON.stringify({
           productId: productId.trim(),
           generationId: generateResult.generationId,
-          generated: editableDraft
-            ? {
-                title: editableDraft.title,
-                descriptionHtml: editableDraft.descriptionHtml,
-                tags: splitTags(editableDraft.tagsText),
-                seo: {
-                  title: editableDraft.seoTitle,
-                  description: editableDraft.seoDescription,
-                },
-              }
-            : undefined,
+          generated: normalizedDraft,
         }),
       });
 
       const data = (await response.json()) as ApplyResponse;
       setApplyResult(data);
+      if (data.ok && typeof window !== "undefined") {
+        window.localStorage.removeItem(DRAFT_STORAGE_KEY);
+        setRestoreMessage(null);
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : "Request failed";
       setApplyResult({ ok: false, error: message });
@@ -459,6 +561,32 @@ export default function GeneratePage() {
       gap: 6,
     },
     editorGrid: { display: "grid", gap: 12, marginTop: 14 },
+    infoNotice: {
+      borderRadius: 12,
+      padding: 12,
+      border: "1px solid rgba(0,0,0,0.10)",
+      background: "rgba(0,0,0,0.03)",
+      fontSize: 13,
+      lineHeight: 1.45,
+    },
+    errorNotice: {
+      borderRadius: 12,
+      padding: 12,
+      border: "1px solid rgba(160,0,0,0.18)",
+      background: "#fff5f5",
+      color: "#8f1111",
+      fontSize: 13,
+      lineHeight: 1.45,
+    },
+    successNotice: {
+      borderRadius: 12,
+      padding: 12,
+      border: "1px solid rgba(11,122,67,0.18)",
+      background: "#f1fbf6",
+      color: "#0b7a43",
+      fontSize: 13,
+      lineHeight: 1.45,
+    },
   };
 
   const stripHtmlToText = (html: string) =>
@@ -514,10 +642,6 @@ export default function GeneratePage() {
     );
   };
 
-  const draftDescriptionText = previewDraft?.descriptionHtml
-    ? stripHtmlToText(previewDraft.descriptionHtml)
-    : "";
-
   const improvementCount = [
     diffLabel(current?.title ?? "", previewDraft?.title ?? ""),
     diffLabel((current?.tags ?? []).join(", "), (previewDraft?.tags ?? []).join(", ")),
@@ -526,7 +650,12 @@ export default function GeneratePage() {
     diffLabel(excerpt(current?.descriptionHtml ?? null, 180), excerpt(previewDraft?.descriptionHtml ?? null, 180)),
   ].filter((status) => status === "Updated" || status === "Added").length;
 
-  const selectedProduct = productResults.find((product) => product.id === productId);
+  const errorFieldSet = new Set((applyResult?.userErrors ?? []).flatMap((item) => item.field ?? []));
+  const hasTitleError = errorFieldSet.has("title");
+  const hasDescriptionError = errorFieldSet.has("descriptionHtml");
+  const hasTagsError = errorFieldSet.has("tags");
+  const hasSeoTitleError = errorFieldSet.has("seo") || errorFieldSet.has("title") || errorFieldSet.has("seo.title");
+  const hasSeoDescriptionError = errorFieldSet.has("seo") || errorFieldSet.has("description") || errorFieldSet.has("seo.description");
 
   return (
     <div style={ui.page}>
@@ -598,7 +727,10 @@ export default function GeneratePage() {
                 ))}
               </div>
               {isSearchingProducts ? <div style={ui.muted}>Loading products...</div> : null}
-              {productSearchError ? <div style={{ color: "#a00" }}>{productSearchError}</div> : null}
+              {!isSearchingProducts && !productSearchError && productResults.length === 0 ? (
+                <div style={ui.infoNotice}>No matching products found yet. Try another keyword or paste a valid Shopify product ID.</div>
+              ) : null}
+              {productSearchError ? <div style={ui.errorNotice}>{productSearchError}</div> : null}
             </div>
           </div>
 
@@ -642,10 +774,11 @@ export default function GeneratePage() {
                 {isGenerating ? "Generating..." : "Generate optimized listing"}
               </button>
               {!canGenerate ? <div style={ui.muted}>Pick a product or provide manual title/image input.</div> : null}
+              {restoreMessage ? <div style={ui.infoNotice}>{restoreMessage}</div> : null}
               {generateResult?.ok === false ? (
-                <div style={{ color: "#a00", display: "grid", gap: 6 }}>
+                <div style={ui.errorNotice}>
                   <div>{generateResult.error ?? "Failed"}</div>
-                  {generateResult.paywall?.billingUrl ? <Link to={generateResult.paywall.billingUrl}>Go to billing</Link> : null}
+                  {generateResult.paywall?.billingUrl ? <div style={{ marginTop: 6 }}><Link to={generateResult.paywall.billingUrl}>Go to billing</Link></div> : null}
                 </div>
               ) : null}
             </div>
@@ -671,6 +804,8 @@ export default function GeneratePage() {
               </div>
             </div>
 
+            {validationMessage ? <div style={{ ...ui.errorNotice, marginTop: 12 }}>{validationMessage}</div> : null}
+
             {!previewDraft || !editableDraft ? (
               <div style={{ ...ui.muted, marginTop: 10 }}>No draft yet. Generate a listing to start editing.</div>
             ) : (
@@ -692,12 +827,12 @@ export default function GeneratePage() {
 
                 <label style={ui.label}>
                   <span>Title</span>
-                  <input style={ui.input} value={editableDraft.title} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, title: e.currentTarget.value } : draftState))} />
+                  <input style={{ ...ui.input, ...(hasTitleError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.title} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, title: e.currentTarget.value } : draftState))} />
                 </label>
 
                 <label style={ui.label}>
                   <span>Product description</span>
-                  <textarea style={{ ...ui.textarea, minHeight: 180 }} value={editableDraft.descriptionHtml} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, descriptionHtml: e.currentTarget.value } : draftState))} />
+                  <textarea style={{ ...ui.textarea, minHeight: 180, ...(hasDescriptionError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.descriptionHtml} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, descriptionHtml: e.currentTarget.value } : draftState))} />
                 </label>
 
                 <label style={ui.label}>
@@ -708,17 +843,17 @@ export default function GeneratePage() {
                 <div style={{ display: "grid", gap: 10, gridTemplateColumns: "1fr 1fr" }}>
                   <label style={ui.label}>
                     <span>SEO title</span>
-                    <input style={ui.input} value={editableDraft.seoTitle} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoTitle: e.currentTarget.value } : draftState))} />
+                    <input style={{ ...ui.input, ...(hasSeoTitleError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.seoTitle} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoTitle: e.currentTarget.value } : draftState))} />
                   </label>
                   <label style={ui.label}>
                     <span>SEO description</span>
-                    <textarea style={{ ...ui.textarea, minHeight: 96 }} value={editableDraft.seoDescription} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoDescription: e.currentTarget.value } : draftState))} />
+                    <textarea style={{ ...ui.textarea, minHeight: 96, ...(hasSeoDescriptionError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.seoDescription} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, seoDescription: e.currentTarget.value } : draftState))} />
                   </label>
                 </div>
 
                 <label style={ui.label}>
                   <span>Tags (comma separated)</span>
-                  <input style={ui.input} value={editableDraft.tagsText} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, tagsText: e.currentTarget.value } : draftState))} />
+                  <input style={{ ...ui.input, ...(hasTagsError ? { border: "1px solid #c62828", background: "#fff8f8" } : {}) }} value={editableDraft.tagsText} onChange={(e) => setEditableDraft((draftState) => (draftState ? { ...draftState, tagsText: e.currentTarget.value } : draftState))} />
                 </label>
 
                 <div style={{ display: "grid", gap: 8 }}>
@@ -730,12 +865,21 @@ export default function GeneratePage() {
                   </div>
                 </div>
 
-                {applyResult?.ok ? <div style={{ color: "#0b7a43", fontWeight: 700 }}>Applied to {applyResult.appliedToProductId}</div> : null}
+                {applyResult?.ok ? <div style={ui.successNotice}>Applied to {applyResult.appliedToProductId}</div> : null}
                 {applyResult?.ok === false ? (
-                  <div style={{ color: "#a00", display: "grid", gap: 6 }}>
+                  <div style={ui.errorNotice}>
                     <div>{applyResult.error ?? "Failed"}</div>
-                    {applyResult.userErrors?.length ? applyResult.userErrors.map((err) => <div key={`${err.field?.join(".")}-${err.message}`}>{err.message}</div>) : null}
-                    {applyResult.paywall?.billingUrl ? <Link to={applyResult.paywall.billingUrl}>Go to billing</Link> : null}
+                    {applyResult.userErrors?.length ? (
+                      <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
+                        {applyResult.userErrors.map((err) => (
+                          <div key={`${err.field?.join(".")}-${err.message}`}>
+                            <strong>{err.fieldLabel ?? (err.field?.join(" → ") || "Shopify")}: </strong>
+                            <span>{err.message}</span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                    {applyResult.paywall?.billingUrl ? <div style={{ marginTop: 6 }}><Link to={applyResult.paywall.billingUrl}>Go to billing</Link></div> : null}
                   </div>
                 ) : null}
               </div>
