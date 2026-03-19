@@ -24,16 +24,19 @@ type ListingGenerationSettings = {
   tone: "conversion" | "neutral";
 };
 
+type GeneratedListingDraft = {
+  title: string;
+  descriptionHtml?: string;
+  bulletPoints: string[];
+  tags: string[];
+  seo: { title: string; description: string };
+};
+
 type BatchGenerateResponse = {
   ok: boolean;
   generationId?: string;
   product?: { id: string; title: string } | null;
-  listing?: {
-    title: string;
-    bulletPoints: string[];
-    tags: string[];
-    seo: { title: string; description: string };
-  };
+  listing?: GeneratedListingDraft;
   error?: string;
   paywall?: {
     billingUrl?: string;
@@ -46,6 +49,7 @@ type BatchRow = {
   product: ProductPickerItem;
   status: "queued" | "running" | "done" | "error";
   generationId?: string;
+  listing?: GeneratedListingDraft;
   generatedTitle?: string;
   generatedTags?: string[];
   error?: string;
@@ -53,9 +57,41 @@ type BatchRow = {
   completedAt?: string;
 };
 
+type BatchWorkspaceState = {
+  productSearch: string;
+  selectedProducts: ProductPickerItem[];
+  rows: BatchRow[];
+  settings: ListingGenerationSettings;
+  savedAt: string;
+};
+
+const BATCH_STORAGE_KEY = "listingmuse-batch-workspace-v1";
+const SINGLE_DRAFT_STORAGE_KEY = "listingmuse-single-draft-v1";
+
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
   return null;
+};
+
+const toEditableDraft = (listing: GeneratedListingDraft) => ({
+  title: listing.title ?? "",
+  descriptionHtml: listing.descriptionHtml ?? "",
+  bulletPointsText: (listing.bulletPoints ?? []).join("\n"),
+  tagsText: (listing.tags ?? []).join(", "),
+  seoTitle: listing.seo?.title ?? "",
+  seoDescription: listing.seo?.description ?? "",
+});
+
+const parseBatchWorkspaceState = (raw: string | null): BatchWorkspaceState | null => {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as BatchWorkspaceState;
+    if (!parsed || typeof parsed !== "object") return null;
+    if (!Array.isArray(parsed.rows) || !Array.isArray(parsed.selectedProducts)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 };
 
 export default function BatchPage() {
@@ -69,12 +105,43 @@ export default function BatchPage() {
   const [batchMessage, setBatchMessage] = useState<string | null>(null);
   const [batchError, setBatchError] = useState<string | null>(null);
   const [batchPaywall, setBatchPaywall] = useState<BatchGenerateResponse["paywall"] | null>(null);
+  const [restoreMessage, setRestoreMessage] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<ListingGenerationSettings>({
     language: "en",
     market: "cross-border",
     tone: "conversion",
   });
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const saved = parseBatchWorkspaceState(window.localStorage.getItem(BATCH_STORAGE_KEY));
+    if (!saved) return;
+
+    setProductSearch(saved.productSearch ?? "");
+    setSelectedProducts(saved.selectedProducts ?? []);
+    setRows(saved.rows ?? []);
+    setSettings(saved.settings ?? { language: "en", market: "cross-border", tone: "conversion" });
+    setRestoreMessage("Recovered your last batch workspace after refresh.");
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const shouldPersist = Boolean(productSearch || selectedProducts.length || rows.length);
+    if (!shouldPersist) {
+      window.localStorage.removeItem(BATCH_STORAGE_KEY);
+      return;
+    }
+
+    const payload: BatchWorkspaceState = {
+      productSearch,
+      selectedProducts,
+      rows,
+      settings,
+      savedAt: new Date().toISOString(),
+    };
+    window.localStorage.setItem(BATCH_STORAGE_KEY, JSON.stringify(payload));
+  }, [productSearch, rows, selectedProducts, settings]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -182,6 +249,34 @@ export default function BatchPage() {
     );
   };
 
+  const openInEditor = (row: BatchRow) => {
+    if (typeof window === "undefined" || !row.generationId || !row.listing) return;
+
+    window.localStorage.setItem(
+      SINGLE_DRAFT_STORAGE_KEY,
+      JSON.stringify({
+        productId: row.product.id,
+        titleOverride: "",
+        imageUrlOverride: row.product.imageUrl ?? "",
+        settings,
+        generateResult: {
+          ok: true,
+          generationId: row.generationId,
+          product: {
+            id: row.product.id,
+            title: row.product.title,
+            imageUrl: row.product.imageUrl ?? null,
+          },
+          listing: row.listing,
+        },
+        editableDraft: toEditableDraft(row.listing),
+        showCompare: false,
+        savedAt: new Date().toISOString(),
+      }),
+    );
+    window.location.assign("/app");
+  };
+
   const runBatch = async () => {
     const pendingRows = rows.filter((row) => row.status === "queued" || row.status === "error");
     if (!pendingRows.length || isRunning) return;
@@ -241,6 +336,7 @@ export default function BatchPage() {
                   ...item,
                   status: "done",
                   generationId: data.generationId,
+                  listing: data.listing,
                   generatedTitle: data.listing?.title,
                   generatedTags: data.listing?.tags ?? [],
                   error: undefined,
@@ -525,6 +621,7 @@ export default function BatchPage() {
             </div>
 
             <div style={{ display: "grid", gap: 10, marginTop: 10 }}>
+              {restoreMessage ? <div style={ui.notice}>{restoreMessage}</div> : null}
               {isRunning && activeRow ? (
                 <div style={ui.notice}>
                   Generating listings now. Currently processing <strong>{activeRow.product.title}</strong>.
@@ -578,7 +675,13 @@ export default function BatchPage() {
                     {row.status === "running" ? <div style={ui.notice}>Generating copy for this product…</div> : null}
                     {row.status === "done" ? (
                       <div style={ui.successNotice}>
-                        Listing draft ready. <Link to="/app">Open editor</Link> to review and apply the final copy.
+                        <div>Listing draft ready.</div>
+                        <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
+                          <button type="button" style={ui.buttonSecondary} onClick={() => openInEditor(row)}>
+                            Open in editor
+                          </button>
+                          <span>Continue review and apply with this draft preloaded.</span>
+                        </div>
                       </div>
                     ) : null}
                     {row.error ? <div style={ui.errorNotice}>{row.error}</div> : null}
