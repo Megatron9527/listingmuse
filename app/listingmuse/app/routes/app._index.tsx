@@ -714,10 +714,6 @@ export default function GeneratePage() {
                 <span>Search products</span>
                 <input value={productSearch} onChange={(e) => setProductSearch(e.currentTarget.value)} placeholder="Search by product title" style={ui.input} />
               </label>
-              <label style={ui.label}>
-                <span>Selected product ID</span>
-                <input value={productId} onChange={(e) => setProductId(e.currentTarget.value)} placeholder="Pick below or paste a Shopify product ID" style={ui.input} />
-              </label>
               {selectedProduct ? (
                 <div style={{ ...ui.codeBlock, padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>{selectedProduct.title}</div>
@@ -725,6 +721,11 @@ export default function GeneratePage() {
                     {selectedProduct.status || "ACTIVE"}
                     {typeof selectedProduct.totalInventory === "number" ? ` · Inventory ${selectedProduct.totalInventory}` : ""}
                   </div>
+                </div>
+              ) : productId ? (
+                <div style={{ ...ui.codeBlock, padding: 12 }}>
+                  <div style={{ fontWeight: 700 }}>Selected product ready</div>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Product ID: {productId}</div>
                 </div>
               ) : null}
               <div style={ui.pickerList}>
@@ -752,7 +753,7 @@ export default function GeneratePage() {
               </div>
               {isSearchingProducts ? <div style={ui.muted}>Loading products...</div> : null}
               {!isSearchingProducts && !productSearchError && productResults.length === 0 ? (
-                <div style={ui.infoNotice}>No matching products found yet. Try another keyword or paste a valid Shopify product ID.</div>
+                <div style={ui.infoNotice}>No matching products found yet. Try another keyword or pick from the available Shopify products.</div>
               ) : null}
               {productSearchError ? <div style={ui.errorNotice}>{productSearchError}</div> : null}
             </div>
