@@ -129,7 +129,6 @@ const parsePersistedDraftState = (raw: string | null): PersistedDraftState | nul
   try {
     const parsed = JSON.parse(raw) as PersistedDraftState;
     if (!parsed || typeof parsed !== "object") return null;
-    if (typeof parsed.productId !== "string") return null;
     return parsed;
   } catch {
     return null;
@@ -169,11 +168,32 @@ export default function GeneratePage() {
     const saved = parsePersistedDraftState(window.localStorage.getItem(DRAFT_STORAGE_KEY));
     if (!saved) return;
 
-    setProductId(saved.productId ?? "");
+    const params = new URLSearchParams(window.location.search);
+    const productIdFromUrl = params.get("productId")?.trim() ?? "";
+    const generationIdFromUrl = params.get("generationId")?.trim() ?? "";
+    const restoredProductId =
+      productIdFromUrl ||
+      (saved.productId ?? "").trim() ||
+      (saved.generateResult?.product?.id ?? "").trim();
+    const restoredGenerationId =
+      generationIdFromUrl ||
+      (saved.generateResult?.generationId ?? "").trim();
+
+    setProductId(restoredProductId);
     setTitleOverride(saved.titleOverride ?? "");
     setImageUrlOverride(saved.imageUrlOverride ?? "");
     setSettings(saved.settings ?? { language: "en", market: "cross-border", tone: "conversion" });
-    setGenerateResult(saved.generateResult ?? null);
+    setGenerateResult(
+      saved.generateResult
+        ? {
+            ...saved.generateResult,
+            generationId: restoredGenerationId || saved.generateResult.generationId,
+            product: saved.generateResult.product
+              ? { ...saved.generateResult.product, id: restoredProductId || saved.generateResult.product.id }
+              : saved.generateResult.product,
+          }
+        : null,
+    );
     setEditableDraft(saved.editableDraft ?? null);
     setShowCompare(Boolean(saved.showCompare));
     setRestoreMessage("Recovered your last draft after refresh. You can continue editing or apply it now.");

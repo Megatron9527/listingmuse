@@ -274,7 +274,11 @@ export default function BatchPage() {
         savedAt: new Date().toISOString(),
       }),
     );
-    window.location.assign("/app");
+    const params = new URLSearchParams({
+      productId: row.product.id,
+      generationId: row.generationId,
+    });
+    window.location.assign(`/app?${params.toString()}`);
   };
 
   const runBatch = async () => {
