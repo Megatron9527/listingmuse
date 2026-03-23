@@ -826,7 +826,7 @@ export default function GeneratePage() {
                     {showCompare ? "Hide changes" : "Compare with current"}
                   </button>
                 ) : null}
-                <button type="button" onClick={apply} disabled={!canApply || isApplying} style={{ ...ui.buttonSuccess, ...(!canApply || isApplying ? ui.buttonDisabled : {}) }}>
+                <button type="button" onClick={apply} disabled={isApplying} style={{ ...ui.buttonSuccess, ...(isApplying ? ui.buttonDisabled : {}) }}>
                   {isApplying ? "Applying..." : "Apply to Shopify"}
                 </button>
               </div>
