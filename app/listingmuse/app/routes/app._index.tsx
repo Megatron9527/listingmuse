@@ -96,7 +96,7 @@ type PersistedDraftState = {
 const DRAFT_STORAGE_KEY = "listingmuse-single-draft-v1";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
-  await authenticate.admin(request);
+  const { session } = await authenticate.admin(request);
 
   return {
     buildInfo: {
@@ -107,6 +107,7 @@ export const loader = async ({ request }: LoaderFunctionArgs) => {
       branch: process.env.RENDER_GIT_BRANCH || process.env.GIT_BRANCH || "unknown",
       builtAt: new Date().toISOString(),
     },
+    shopDomain: session.shop,
   };
 };
 
@@ -146,7 +147,7 @@ const parsePersistedDraftState = (raw: string | null): PersistedDraftState | nul
 };
 
 export default function GeneratePage() {
-  const { buildInfo } = useLoaderData<typeof loader>();
+  const { buildInfo, shopDomain } = useLoaderData<typeof loader>();
 
   const [productId, setProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
@@ -724,6 +725,10 @@ export default function GeneratePage() {
           : "Apply failed"
       : null;
 
+  const adminProductUrl = resolvedProductId
+    ? `https://${shopDomain}/admin/products/${resolvedProductId.split("/").pop()}`
+    : null;
+
   return (
     <div style={ui.page}>
       <div style={ui.hero}>
@@ -886,6 +891,13 @@ export default function GeneratePage() {
 
             {validationMessage ? <div style={{ ...ui.errorNotice, marginTop: 12 }}>{validationMessage}</div> : null}
 
+            <div style={{ ...ui.infoNotice, marginTop: 12 }}>
+              <div style={{ fontWeight: 700, marginBottom: 6 }}>Current apply context</div>
+              <div>Resolved product ID: {resolvedProductId || "Not resolved yet"}</div>
+              <div>Draft ID: {generateResult?.generationId || "No draft ID"}</div>
+              <div>Shop domain: {shopDomain}</div>
+            </div>
+
             {!previewDraft || !editableDraft ? (
               <div style={{ ...ui.muted, marginTop: 10 }}>No draft yet. Generate a listing to start editing.</div>
             ) : (
@@ -971,7 +983,7 @@ export default function GeneratePage() {
                     {applyResult.auditLogId ? <div style={{ marginTop: 6 }}>Audit log ID: {applyResult.auditLogId}</div> : null}
                     <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <Link to="/app/batch">Back to batch workspace</Link>
-                      {resolvedProductId ? <a href={`https://${"bowen-app-dev.myshopify.com"}/admin/products/${resolvedProductId.split("/").pop()}`} target="_blank" rel="noreferrer">Open in Shopify</a> : null}
+                      {adminProductUrl ? <a href={adminProductUrl} target="_blank" rel="noreferrer">Open in Shopify</a> : null}
                       <button type="button" style={ui.buttonSecondary} onClick={() => {
                         setGenerateResult(null);
                         setEditableDraft(null);
