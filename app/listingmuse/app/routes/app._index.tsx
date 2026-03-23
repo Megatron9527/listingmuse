@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { HeadersFunction, LoaderFunctionArgs } from "react-router";
-import { Link } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { boundary } from "@shopify/shopify-app-react-router/server";
 import { authenticate } from "../shopify.server";
 
@@ -97,7 +97,17 @@ const DRAFT_STORAGE_KEY = "listingmuse-single-draft-v1";
 
 export const loader = async ({ request }: LoaderFunctionArgs) => {
   await authenticate.admin(request);
-  return null;
+
+  return {
+    buildInfo: {
+      commit:
+        process.env.RENDER_GIT_COMMIT?.slice(0, 7) ||
+        process.env.GIT_COMMIT?.slice(0, 7) ||
+        "local",
+      branch: process.env.RENDER_GIT_BRANCH || process.env.GIT_BRANCH || "unknown",
+      builtAt: new Date().toISOString(),
+    },
+  };
 };
 
 const toEditableDraft = (draft: ListingDraft): EditableDraft => ({
@@ -136,6 +146,8 @@ const parsePersistedDraftState = (raw: string | null): PersistedDraftState | nul
 };
 
 export default function GeneratePage() {
+  const { buildInfo } = useLoaderData<typeof loader>();
+
   const [productId, setProductId] = useState("");
   const [productSearch, setProductSearch] = useState("");
   const [productResults, setProductResults] = useState<ProductPickerItem[]>([]);
@@ -622,6 +634,16 @@ export default function GeneratePage() {
       fontSize: 13,
       lineHeight: 1.45,
     },
+    footerMeta: {
+      marginTop: 18,
+      paddingTop: 12,
+      borderTop: "1px solid rgba(0,0,0,0.08)",
+      fontSize: 12,
+      opacity: 0.72,
+      display: "flex",
+      gap: 10,
+      flexWrap: "wrap" as const,
+    },
   };
 
   const stripHtmlToText = (html: string) =>
@@ -981,6 +1003,12 @@ export default function GeneratePage() {
             </div>
           ) : null}
         </div>
+      </div>
+
+      <div style={ui.footerMeta}>
+        <span>Build commit: {buildInfo.commit}</span>
+        <span>Branch: {buildInfo.branch}</span>
+        <span>Build timestamp: {buildInfo.builtAt}</span>
       </div>
     </div>
   );
