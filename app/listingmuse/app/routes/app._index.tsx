@@ -266,11 +266,19 @@ export default function GeneratePage() {
     );
   }, [imageUrlOverride, productId, titleOverride]);
 
-  const canApply = useMemo(() => {
-    return Boolean(productId.trim()) && Boolean(editableDraft);
-  }, [editableDraft, productId]);
+  const resolvedProductId = useMemo(() => {
+    return (
+      productId.trim() ||
+      generateResult?.product?.id?.trim() ||
+      ""
+    );
+  }, [generateResult?.product?.id, productId]);
 
-  const selectedProduct = productResults.find((product) => product.id === productId);
+  const canApply = useMemo(() => {
+    return Boolean(resolvedProductId) && Boolean(editableDraft);
+  }, [editableDraft, resolvedProductId]);
+
+  const selectedProduct = productResults.find((product) => product.id === resolvedProductId);
 
   const generate = async () => {
     if (isGenerating) return;
@@ -316,7 +324,7 @@ export default function GeneratePage() {
 
     setValidationMessage(null);
 
-    if (!productId.trim()) {
+    if (!resolvedProductId) {
       setApplyResult({ ok: false, error: "Select a Shopify product before applying the draft." });
       return;
     }
@@ -356,7 +364,7 @@ export default function GeneratePage() {
         headers: { "Content-Type": "application/json" },
         credentials: "same-origin",
         body: JSON.stringify({
-          productId: productId.trim(),
+          productId: resolvedProductId,
           generationId: generateResult?.generationId,
           generated: normalizedDraft,
         }),
@@ -718,10 +726,10 @@ export default function GeneratePage() {
                     {typeof selectedProduct.totalInventory === "number" ? ` · Inventory ${selectedProduct.totalInventory}` : ""}
                   </div>
                 </div>
-              ) : productId ? (
+              ) : resolvedProductId ? (
                 <div style={{ ...ui.codeBlock, padding: 12 }}>
                   <div style={{ fontWeight: 700 }}>Selected product ready</div>
-                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Product ID: {productId}</div>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Product ID: {resolvedProductId}</div>
                 </div>
               ) : null}
               <div style={ui.pickerList}>
@@ -735,6 +743,8 @@ export default function GeneratePage() {
                     }}
                     onClick={() => {
                       setProductId(product.id);
+                      setApplyResult(null);
+                      setValidationMessage(null);
                       setTitleOverride("");
                       if (product.imageUrl) setImageUrlOverride(product.imageUrl);
                     }}
