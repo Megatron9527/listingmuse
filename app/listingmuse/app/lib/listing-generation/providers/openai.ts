@@ -167,15 +167,18 @@ export class MiniMaxListingProvider implements ListingGenerationProvider {
   id = "minimax-v1";
 
   async generate(input: ListingGenerationInput): Promise<ListingDraft> {
-    const apiKey = process.env.MINIMAX_API_KEY;
-    const model = process.env.MINIMAX_MODEL || "MiniMax-Text-01";
-    const baseUrl = process.env.MINIMAX_BASE_URL;
+    const apiKey = process.env.MINIMAX_API_KEY || process.env.OPENAI_API_KEY;
+    const model =
+      process.env.MINIMAX_MODEL ||
+      process.env.OPENAI_MODEL ||
+      "MiniMax-Text-01";
+    const baseUrl = process.env.MINIMAX_BASE_URL || process.env.OPENAI_BASE_URL;
 
     if (!apiKey) {
-      throw new Error("MiniMax provider not configured: missing MINIMAX_API_KEY");
+      throw new Error("MiniMax provider not configured: missing MINIMAX_API_KEY or OPENAI_API_KEY");
     }
     if (!baseUrl) {
-      throw new Error("MiniMax provider not configured: missing MINIMAX_BASE_URL");
+      throw new Error("MiniMax provider not configured: missing MINIMAX_BASE_URL or OPENAI_BASE_URL");
     }
 
     const response = await fetch(`${baseUrl.replace(/\/$/, "")}/chat/completions`, {
