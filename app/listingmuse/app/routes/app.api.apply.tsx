@@ -1,5 +1,4 @@
 import type { Prisma } from "@prisma/client";
-import { randomUUID } from "node:crypto";
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import prisma from "../db.server";
 import {
@@ -307,13 +306,11 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     },
   });
 
-  const auditLogId = `audit_${randomUUID()}`;
-
   return jsonResponse({
     ok: true,
     appliedToProductId: productGid,
     shopifyProduct: updatedProduct,
-    auditLogId,
+    auditLogId: audit.id,
     audit: {
       id: audit.id,
       createdAt: audit.createdAt.toISOString(),
