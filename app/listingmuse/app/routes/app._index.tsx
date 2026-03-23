@@ -280,6 +280,13 @@ export default function GeneratePage() {
 
   const selectedProduct = productResults.find((product) => product.id === resolvedProductId);
 
+  useEffect(() => {
+    if (!applyResult?.error) return;
+    if (resolvedProductId && editableDraft) {
+      setApplyResult(null);
+    }
+  }, [applyResult?.error, editableDraft, resolvedProductId]);
+
   const generate = async () => {
     if (isGenerating) return;
 
@@ -717,6 +724,7 @@ export default function GeneratePage() {
               <label style={ui.label}>
                 <span>Search products</span>
                 <input value={productSearch} onChange={(e) => setProductSearch(e.currentTarget.value)} placeholder="Search by product title" style={ui.input} />
+                <span style={{ fontSize: 12, opacity: 0.68 }}>This field only filters the product list. It is not the applied product ID.</span>
               </label>
               {selectedProduct ? (
                 <div style={{ ...ui.codeBlock, padding: 12 }}>
@@ -725,6 +733,7 @@ export default function GeneratePage() {
                     {selectedProduct.status || "ACTIVE"}
                     {typeof selectedProduct.totalInventory === "number" ? ` · Inventory ${selectedProduct.totalInventory}` : ""}
                   </div>
+                  <div style={{ fontSize: 12, opacity: 0.7, marginTop: 4 }}>Applied product ID: {resolvedProductId}</div>
                 </div>
               ) : resolvedProductId ? (
                 <div style={{ ...ui.codeBlock, padding: 12 }}>
@@ -810,6 +819,7 @@ export default function GeneratePage() {
               {generationSuccessMessage ? (
                 <div style={ui.successNotice}>
                   <div>{generationSuccessMessage}</div>
+                  {resolvedProductId ? <div style={{ marginTop: 6 }}>Selected product ID for apply: {resolvedProductId}</div> : null}
                   <div style={{ marginTop: 6 }}>Next step: refine the draft in the editor, then apply it to Shopify.</div>
                 </div>
               ) : null}
