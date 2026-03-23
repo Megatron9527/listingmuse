@@ -56,6 +56,57 @@ ${JSON.stringify(
   )}`;
 };
 
+const extractJsonObject = (content: string) => {
+  const fenced = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const candidate = fenced?.[1]?.trim() || content.trim();
+
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    // continue to balanced-brace extraction
+  }
+
+  const start = candidate.indexOf("{");
+  if (start === -1) {
+    throw new Error("Model response did not contain a JSON object");
+  }
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < candidate.length; i += 1) {
+    const ch = candidate[i];
+
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (ch === "\\") {
+        escaped = true;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+
+    if (ch === "{") depth += 1;
+    if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) {
+        const jsonSlice = candidate.slice(start, i + 1);
+        return JSON.parse(jsonSlice);
+      }
+    }
+  }
+
+  throw new Error("Model response contained malformed JSON");
+};
+
 const parseListingDraft = (
   raw: unknown,
   providerId: string,
@@ -154,7 +205,7 @@ export class OpenAiListingProvider implements ListingGenerationProvider {
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(content);
+      parsed = extractJsonObject(content);
     } catch {
       throw new Error("OpenAI response was not valid JSON");
     }
@@ -221,7 +272,7 @@ export class MiniMaxListingProvider implements ListingGenerationProvider {
 
     let parsed: unknown;
     try {
-      parsed = JSON.parse(content);
+      parsed = extractJsonObject(content);
     } catch {
       throw new Error("MiniMax response was not valid JSON");
     }
