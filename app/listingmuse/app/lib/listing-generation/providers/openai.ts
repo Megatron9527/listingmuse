@@ -171,7 +171,7 @@ export class MiniMaxListingProvider implements ListingGenerationProvider {
     const model =
       process.env.MINIMAX_MODEL ||
       process.env.OPENAI_MODEL ||
-      "MiniMax-Text-01";
+      "MiniMax-M2.7";
     const baseUrl = process.env.MINIMAX_BASE_URL || process.env.OPENAI_BASE_URL;
 
     if (!apiKey) {
@@ -189,8 +189,9 @@ export class MiniMaxListingProvider implements ListingGenerationProvider {
       },
       body: JSON.stringify({
         model,
-        temperature: 0.7,
+        temperature: 1.0,
         response_format: { type: "json_object" },
+        extra_body: { reasoning_split: true },
         messages: [
           {
             role: "system",
