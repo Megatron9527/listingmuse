@@ -714,6 +714,16 @@ export default function GeneratePage() {
   const hasSeoTitleError = errorFieldSet.has("seo") || errorFieldSet.has("title") || errorFieldSet.has("seo.title");
   const hasSeoDescriptionError = errorFieldSet.has("seo") || errorFieldSet.has("description") || errorFieldSet.has("seo.description");
 
+  const applyStatusTitle = applyResult?.ok
+    ? "Shopify updated successfully"
+    : applyResult?.ok === false
+      ? applyResult.paywall?.billingUrl
+        ? "Billing required before apply"
+        : applyResult.userErrors?.length
+          ? "Shopify rejected part of the update"
+          : "Apply failed"
+      : null;
+
   return (
     <div style={ui.page}>
       <div style={ui.hero}>
@@ -956,9 +966,12 @@ export default function GeneratePage() {
                 {isApplying ? <div style={ui.infoNotice}>Applying the approved copy back to Shopify now…</div> : null}
                 {applyResult?.ok ? (
                   <div style={ui.successNotice}>
-                    <div>Applied to {applyResult.appliedToProductId}</div>
+                    <div style={{ fontWeight: 700 }}>{applyStatusTitle}</div>
+                    <div style={{ marginTop: 6 }}>Applied product ID: {applyResult.appliedToProductId}</div>
+                    {applyResult.auditLogId ? <div style={{ marginTop: 6 }}>Audit log ID: {applyResult.auditLogId}</div> : null}
                     <div style={{ marginTop: 6, display: "flex", gap: 10, flexWrap: "wrap" }}>
                       <Link to="/app/batch">Back to batch workspace</Link>
+                      {resolvedProductId ? <a href={`https://${"bowen-app-dev.myshopify.com"}/admin/products/${resolvedProductId.split("/").pop()}`} target="_blank" rel="noreferrer">Open in Shopify</a> : null}
                       <button type="button" style={ui.buttonSecondary} onClick={() => {
                         setGenerateResult(null);
                         setEditableDraft(null);
@@ -971,7 +984,8 @@ export default function GeneratePage() {
                 ) : null}
                 {applyResult?.ok === false ? (
                   <div style={ui.errorNotice}>
-                    <div>{applyResult.error ?? "Failed"}</div>
+                    <div style={{ fontWeight: 700 }}>{applyStatusTitle}</div>
+                    <div style={{ marginTop: 6 }}>{applyResult.error ?? "Failed"}</div>
                     {applyResult.userErrors?.length ? (
                       <div style={{ display: "grid", gap: 6, marginTop: 8 }}>
                         {applyResult.userErrors.map((err) => (
