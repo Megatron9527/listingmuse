@@ -193,6 +193,7 @@ export default function GeneratePage() {
       (saved.generateResult?.generationId ?? "").trim();
 
     setProductId(restoredProductId);
+    setProductSearch("");
     setTitleOverride(saved.titleOverride ?? "");
     setImageUrlOverride(saved.imageUrlOverride ?? "");
     setSettings(saved.settings ?? { language: "en", market: "cross-border", tone: "conversion" });
@@ -327,6 +328,11 @@ export default function GeneratePage() {
       const data = (await response.json()) as GenerateResponse;
       setGenerateResult(data);
       setShowCompare(false);
+      if (data.product?.title) {
+        setProductSearch(data.product.title);
+      } else {
+        setProductSearch("");
+      }
       if (data.listing) {
         setEditableDraft(toEditableDraft(data.listing));
         setGenerationSuccessMessage("Draft generated successfully. Review the copy below, then apply it to Shopify when ready.");
@@ -789,6 +795,7 @@ export default function GeneratePage() {
                     }}
                     onClick={() => {
                       setProductId(product.id);
+                      setProductSearch(product.title);
                       setApplyResult(null);
                       setValidationMessage(null);
                       setTitleOverride("");
