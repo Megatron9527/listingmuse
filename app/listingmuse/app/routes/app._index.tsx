@@ -267,8 +267,8 @@ export default function GeneratePage() {
   }, [imageUrlOverride, productId, titleOverride]);
 
   const canApply = useMemo(() => {
-    return Boolean(productId.trim()) && Boolean(generateResult?.generationId) && Boolean(editableDraft);
-  }, [editableDraft, generateResult?.generationId, productId]);
+    return Boolean(productId.trim()) && Boolean(editableDraft);
+  }, [editableDraft, productId]);
 
   const selectedProduct = productResults.find((product) => product.id === productId);
 
@@ -320,10 +320,6 @@ export default function GeneratePage() {
       setApplyResult({ ok: false, error: "Select a Shopify product before applying the draft." });
       return;
     }
-    if (!generateResult?.generationId) {
-      setApplyResult({ ok: false, error: "Generate a draft first, then apply it to Shopify." });
-      return;
-    }
     if (!editableDraft) {
       setApplyResult({ ok: false, error: "The draft is missing. Regenerate the listing before applying." });
       return;
@@ -361,7 +357,7 @@ export default function GeneratePage() {
         credentials: "same-origin",
         body: JSON.stringify({
           productId: productId.trim(),
-          generationId: generateResult.generationId,
+          generationId: generateResult?.generationId,
           generated: normalizedDraft,
         }),
       });
