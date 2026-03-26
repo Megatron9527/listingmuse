@@ -142,18 +142,9 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     return jsonResponse({ ok: false, error: "Invalid JSON" }, { status: 400 });
   }
 
-  const productIdInput = coerceString(payload.productId);
-  if (!productIdInput) {
-    return jsonResponse(
-      {
-        ok: false,
-        error: "Select a Shopify product before applying the generated listing.",
-      },
-      { status: 400 },
-    );
-  }
-
   const generationId = coerceString(payload.generationId);
+  let productIdInput = coerceString(payload.productId);
+
   if (!generationId && payload.generated == null) {
     return jsonResponse(
       {
@@ -164,12 +155,25 @@ export const action = async ({ request }: ActionFunctionArgs) => {
     );
   }
 
+  let generationRecord:
+    | ({ outputJson: unknown; productSnapshot?: { productId: string } | null })
+    | null = null;
+
   let listingUnknown: unknown = payload.generated;
-  if (listingUnknown == null && generationId) {
-    const gen = await prisma.generation.findUnique({
+  if (generationId) {
+    generationRecord = await prisma.generation.findUnique({
       where: { id: generationId },
+      select: {
+        outputJson: true,
+        productSnapshot: {
+          select: {
+            productId: true,
+          },
+        },
+      },
     });
-    if (!gen) {
+
+    if (!generationRecord) {
       return jsonResponse(
         {
           ok: false,
@@ -178,7 +182,24 @@ export const action = async ({ request }: ActionFunctionArgs) => {
         { status: 404 },
       );
     }
-    listingUnknown = gen.outputJson;
+
+    if (!productIdInput) {
+      productIdInput = coerceString(generationRecord.productSnapshot?.productId);
+    }
+
+    if (listingUnknown == null) {
+      listingUnknown = generationRecord.outputJson;
+    }
+  }
+
+  if (!productIdInput) {
+    return jsonResponse(
+      {
+        ok: false,
+        error: "Select a Shopify product before applying the generated listing.",
+      },
+      { status: 400 },
+    );
   }
 
   if (!isRecord(listingUnknown)) {

@@ -274,12 +274,6 @@ export default function GeneratePage() {
     window.localStorage.setItem(DRAFT_STORAGE_KEY, JSON.stringify(payload));
   }, [editableDraft, generateResult, imageUrlOverride, productId, settings, showCompare, titleOverride]);
 
-  const canGenerate = useMemo(() => {
-    return Boolean(
-      productId.trim() || titleOverride.trim() || imageUrlOverride.trim(),
-    );
-  }, [imageUrlOverride, productId, titleOverride]);
-
   const resolvedProductId = useMemo(() => {
     return (
       productId.trim() ||
@@ -287,6 +281,12 @@ export default function GeneratePage() {
       ""
     );
   }, [generateResult?.product?.id, productId]);
+
+  const canGenerate = useMemo(() => {
+    return Boolean(
+      resolvedProductId || titleOverride.trim() || imageUrlOverride.trim(),
+    );
+  }, [imageUrlOverride, resolvedProductId, titleOverride]);
 
   const canApply = useMemo(() => {
     return Boolean(resolvedProductId) && Boolean(editableDraft);
@@ -303,6 +303,11 @@ export default function GeneratePage() {
 
   const generate = async () => {
     if (isGenerating) return;
+
+    if (!canGenerate) {
+      setValidationMessage("Choose a Shopify product, or provide a custom title or image before generating.");
+      return;
+    }
 
     setValidationMessage(null);
     setGenerationSuccessMessage(null);
@@ -764,10 +769,13 @@ export default function GeneratePage() {
           <div style={ui.card}>
             <div style={ui.sectionTitle}>1. Choose product</div>
             <div style={{ display: "grid", gap: 10 }}>
+              <div style={ui.infoNotice}>
+                Choose one source to generate from: a Shopify product, a custom title, or a custom image URL. Title override and Image URL override are optional.
+              </div>
               <label style={ui.label}>
                 <span>Search products</span>
                 <input value={productSearch} onChange={(e) => setProductSearch(e.currentTarget.value)} placeholder="Search by product title" style={ui.input} />
-                <span style={{ fontSize: 12, opacity: 0.68 }}>This field only filters the product list. It is not the applied product ID.</span>
+                <span style={{ fontSize: 12, opacity: 0.68 }}>This field only filters the product list. Picking a product here should be enough to generate.</span>
               </label>
               {selectedProduct ? (
                 <div style={{ ...ui.codeBlock, padding: 12 }}>
@@ -841,12 +849,12 @@ export default function GeneratePage() {
                 </select>
               </label>
               <label style={ui.label}>
-                <span>Title override</span>
-                <input value={titleOverride} onChange={(e) => setTitleOverride(e.currentTarget.value)} placeholder="Optional: force a starting title" style={ui.input} />
+                <span>Title override (optional)</span>
+                <input value={titleOverride} onChange={(e) => setTitleOverride(e.currentTarget.value)} placeholder="Optional: use a custom starting title" style={ui.input} />
               </label>
               <label style={ui.label}>
-                <span>Image URL override</span>
-                <input value={imageUrlOverride} onChange={(e) => setImageUrlOverride(e.currentTarget.value)} placeholder="Optional: use a specific hero image" style={ui.input} />
+                <span>Image URL override (optional)</span>
+                <input value={imageUrlOverride} onChange={(e) => setImageUrlOverride(e.currentTarget.value)} placeholder="Optional: use a custom hero image URL" style={ui.input} />
               </label>
             </div>
           </div>
@@ -857,7 +865,7 @@ export default function GeneratePage() {
               <button type="button" onClick={generate} disabled={!canGenerate || isGenerating} style={{ ...ui.buttonPrimary, ...(!canGenerate || isGenerating ? ui.buttonDisabled : {}) }}>
                 {isGenerating ? "Generating..." : "Generate optimized listing"}
               </button>
-              {!canGenerate ? <div style={ui.muted}>Pick a product or provide manual title/image input.</div> : null}
+              {!canGenerate ? <div style={ui.muted}>Choose a Shopify product, or enter a custom title or image URL.</div> : null}
               {restoreMessage ? <div style={ui.infoNotice}>{restoreMessage}</div> : null}
               {isGenerating ? <div style={ui.infoNotice}>Generating your optimized listing now. Keep this page open while we prepare the draft.</div> : null}
               {generationSuccessMessage ? (
